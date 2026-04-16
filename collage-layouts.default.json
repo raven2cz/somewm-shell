@@ -1,0 +1,18 @@
+{
+  "4": {
+    "collection": "default",
+    "slots": [
+      { "x": 60, "y": 80,  "maxHeight": 440, "imageIndex": 0 },
+      { "x": 60, "y": 560, "maxHeight": 440, "imageIndex": 1 }
+    ]
+  },
+  "9": {
+    "collection": "default",
+    "slots": [
+      { "x": 180, "y": 40,  "maxHeight": 380, "imageIndex": 0 },
+      { "x": 180, "y": 680, "maxHeight": 380, "imageIndex": 1 },
+      { "x": 52,  "y": 410, "maxHeight": 280, "imageIndex": 2 },
+      { "x": 372, "y": 410, "maxHeight": 280, "imageIndex": 3 }
+    ]
+  }
+}
