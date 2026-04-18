@@ -44,7 +44,7 @@ Item {
                     Image {
                         anchors.fill: parent
                         anchors.margins: 1
-                        source: "file://" + modelData.path
+                        source: Core.FileUtil.fileUrl(modelData.path)
                         fillMode: Image.PreserveAspectCrop
                         asynchronous: true
                         sourceSize.width: 400

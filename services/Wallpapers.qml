@@ -24,7 +24,7 @@ Singleton {
 
     // Thumbnail cache directory
     readonly property string thumbDir: Quickshell.env("HOME") + "/.cache/somewm-shell/wallpaper_thumbs"
-    readonly property string thumbDirUrl: "file://" + thumbDir
+    readonly property string thumbDirUrl: Core.FileUtil.fileUrl(thumbDir)
 
     // Apply theme toggle — persisted in config.json
     property bool applyTheme: {

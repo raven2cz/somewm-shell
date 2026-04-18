@@ -265,8 +265,14 @@ Item {
             Layout.fillHeight: true
             clip: true
 
+            // Reserve a strip on the right for the scrollbar so it doesn't
+            // overlap the cells (professional look). cellWidth excludes it.
+            readonly property int scrollBarWidth: Math.round(10 * Core.Theme.dpiScale)
+            readonly property int scrollBarGap: Math.round(4 * Core.Theme.dpiScale)
+            readonly property int usableWidth: width - scrollBarWidth - scrollBarGap
+
             property real spacingPx: Math.round(10 * Core.Theme.dpiScale)
-            cellWidth: width / Math.max(1, root.columnCount)
+            cellWidth: Math.floor(usableWidth / Math.max(1, root.columnCount))
             // 2:3 portrait aspect for uniform cells
             cellHeight: Math.round(cellWidth * 1.5)
 
@@ -275,16 +281,79 @@ Item {
 
             boundsBehavior: Flickable.StopAtBounds
             maximumFlickVelocity: Math.round(3500 * Core.Theme.dpiScale)
-            flickDeceleration: Math.round(5000 * Core.Theme.dpiScale)
 
             focus: true
             keyNavigationEnabled: true
             keyNavigationWraps: false
 
-            // Scroll bar indicator
+            // === Smooth wheel scrolling (dots-hyprland StyledFlickable pattern) ===
+            // Animate contentY via Behavior, accumulate destination across
+            // ticks in _scrollTargetY so rapid spins don't lose deltas, and
+            // let touchpad (small deltas) use a smaller multiplier for a
+            // natural pixel-accurate feel. WheelHandler proved unreliable
+            // at preempting GridView's built-in Flickable wheel handling —
+            // a MouseArea with Qt.NoButton sits above delegates, captures
+            // wheel events, and clicks fall through because no mouse button
+            // is accepted.
+            property real _scrollTargetY: 0
+            onContentYChanged: if (!scrollAnim.running) _scrollTargetY = contentY
+
+            Behavior on contentY {
+                NumberAnimation {
+                    id: scrollAnim
+                    duration: 400
+                    easing.type: Easing.OutExpo
+                }
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.NoButton
+                onWheel: (wheel) => {
+                    var absDelta = Math.abs(wheel.angleDelta.y)
+                    var isMouseWheel = absDelta >= 120
+                    // Mouse wheel ticks → step ~half a row (feels snappy
+                    // without jarring jumps); touchpad → small pixel deltas.
+                    var factor = isMouseWheel
+                        ? Math.round(grid.cellHeight * 0.6)
+                        : Math.round(40 * Core.Theme.dpiScale)
+                    var delta = wheel.angleDelta.y / 120
+                    var maxY = Math.max(0, grid.contentHeight - grid.height)
+                    var base = scrollAnim.running ? grid._scrollTargetY : grid.contentY
+                    var target = Math.max(0, Math.min(maxY, base - delta * factor))
+                    grid._scrollTargetY = target
+                    grid.contentY = target
+                    wheel.accepted = true
+                }
+            }
+
+            // Styled scrollbar — lives in the reserved right strip.
             ScrollBar.vertical: ScrollBar {
-                active: grid.moving || hovered
+                id: vScroll
+                active: grid.moving || hovered || scrollAnim.running
                 policy: ScrollBar.AsNeeded
+                width: grid.scrollBarWidth
+                padding: Math.round(2 * Core.Theme.dpiScale)
+                minimumSize: 0.08
+
+                contentItem: Rectangle {
+                    implicitWidth: Math.round(6 * Core.Theme.dpiScale)
+                    radius: width / 2
+                    color: vScroll.pressed
+                        ? Core.Theme.accent
+                        : (vScroll.hovered ? Core.Theme.fgDim : Core.Theme.fgMuted)
+                    opacity: vScroll.active ? 1.0 : 0.0
+                    Behavior on opacity {
+                        NumberAnimation { duration: Core.Anims.duration.fast }
+                    }
+                    Behavior on color {
+                        ColorAnimation { duration: Core.Anims.duration.fast }
+                    }
+                }
+
+                background: Rectangle {
+                    color: "transparent"
+                }
             }
 
             delegate: Item {
@@ -322,14 +391,21 @@ Item {
                     Image {
                         id: img
                         anchors.fill: parent
-                        source: "file://" + cellRoot.modelData
+                        source: Core.FileUtil.fileUrl(cellRoot.modelData)
                         asynchronous: true
-                        cache: false
+                        cache: true
                         fillMode: Image.PreserveAspectCrop
                         sourceSize.width: Math.round(grid.cellWidth * 2)
                         sourceSize.height: Math.round(grid.cellHeight * 2)
                         smooth: true
                         mipmap: true
+
+                        onStatusChanged: {
+                            if (status === Image.Error) {
+                                console.warn("PortraitsGallery: failed to load",
+                                    cellRoot.modelData, "→", errorString)
+                            }
+                        }
 
                         opacity: status === Image.Ready ? 1.0 : 0.0
                         Behavior on opacity {

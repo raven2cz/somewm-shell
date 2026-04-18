@@ -105,7 +105,7 @@ GridLayout {
                     id: avatarImg
                     anchors.fill: parent
                     anchors.margins: Math.round(2 * sp)
-                    source: "file://" + Quickshell.env("HOME") + "/.face"
+                    source: Core.FileUtil.fileUrl(Quickshell.env("HOME") + "/.face")
                     fillMode: Image.PreserveAspectCrop
                     asynchronous: true
                     visible: false

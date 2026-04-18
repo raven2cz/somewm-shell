@@ -70,15 +70,15 @@ Item {
 
 		// First load: set directly without crossfade
 		if (_currentPath === "") {
-			imgFront.source = "file://" + newPath
+			imgFront.source = Core.FileUtil.fileUrl(newPath)
 			_currentPath = newPath
 			return
 		}
 
 		if (_useFront) {
-			imgBack.source = "file://" + newPath
+			imgBack.source = Core.FileUtil.fileUrl(newPath)
 		} else {
-			imgFront.source = "file://" + newPath
+			imgFront.source = Core.FileUtil.fileUrl(newPath)
 		}
 		_useFront = !_useFront
 		_currentPath = newPath

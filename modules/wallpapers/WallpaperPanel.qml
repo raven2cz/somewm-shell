@@ -314,7 +314,7 @@ Variants {
                                             width: Math.round(44 * panel.sp)
                                             height: Math.round(44 * panel.sp)
                                             source: (width > 0 && height > 0 && modelData.path)
-                                                ? "file://" + modelData.path + "logo.png" : ""
+                                                ? Core.FileUtil.fileUrl(modelData.path + "logo.png") : ""
                                             fillMode: Image.PreserveAspectFit
                                             opacity: 0.75
                                             sourceSize: Qt.size(256, 256)
@@ -563,7 +563,7 @@ Variants {
                         // Outer blurry border image
                         Image {
                             anchors.fill: parent
-                            source: delegateRoot.filePath ? "file://" + delegateRoot.filePath : ""
+                            source: delegateRoot.filePath ? Core.FileUtil.fileUrl(delegateRoot.filePath) : ""
                             sourceSize: Qt.size(1, 1)
                             fillMode: Image.Stretch
                             asynchronous: true
@@ -589,13 +589,12 @@ Variants {
                                     if (!delegateRoot.filePath) return ""
                                     // Theme view: use resolved path directly (thumbnails are from wrong dir)
                                     if (Services.Wallpapers.isThemeView)
-                                        return "file://" + delegateRoot.filePath
-                                    var thumbUrl = Services.Wallpapers.thumbDirUrl + "/" + delegateRoot.safeFileName
-                                    return thumbUrl
+                                        return Core.FileUtil.fileUrl(delegateRoot.filePath)
+                                    return Core.FileUtil.fileUrl(Services.Wallpapers.thumbDir + "/" + delegateRoot.safeFileName)
                                 }
                                 onStatusChanged: {
                                     if (status === Image.Error && delegateRoot.filePath) {
-                                        source = "file://" + delegateRoot.filePath
+                                        source = Core.FileUtil.fileUrl(delegateRoot.filePath)
                                     }
                                 }
                                 asynchronous: true
@@ -830,7 +829,7 @@ Variants {
                                 sourceSize: Qt.size(160, 100)
                                 asynchronous: true
                                 // Use firstImage from browse folder model if available
-                                source: modelData.firstImage ? "file://" + modelData.firstImage : ""
+                                source: modelData.firstImage ? Core.FileUtil.fileUrl(modelData.firstImage) : ""
 
                                 Rectangle {
                                     anchors.fill: parent

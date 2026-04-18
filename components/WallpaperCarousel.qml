@@ -108,7 +108,7 @@ Item {
 
                 Image {
                     anchors.fill: parent
-                    source: modelData.path ? "file://" + modelData.path : ""
+                    source: modelData.path ? Core.FileUtil.fileUrl(modelData.path) : ""
                     fillMode: Image.PreserveAspectCrop
                     asynchronous: true
                     opacity: cardDelegate.animOpacity

@@ -25,7 +25,7 @@ Item {
             anchors.centerIn: parent
             width: parent.width - 80
             height: parent.height - 80
-            source: root.previewPath ? "file://" + root.previewPath : ""
+            source: root.previewPath ? Core.FileUtil.fileUrl(root.previewPath) : ""
             fillMode: Image.PreserveAspectFit
             asynchronous: true
 
