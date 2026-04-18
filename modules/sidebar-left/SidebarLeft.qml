@@ -29,6 +29,11 @@ Variants {
             ? Math.round(900 * Core.Theme.dpiScale)
             : Math.round(460 * Core.Theme.dpiScale)
 
+        // Inset content so wibar stays visible on top + symmetric gap below.
+        // Matches typical wibar height (~44dp).
+        contentTopMargin: Math.round(44 * Core.Theme.dpiScale)
+        contentBottomMargin: Math.round(44 * Core.Theme.dpiScale)
+
         // Only show on the focused screen to avoid duplicate panels.
         shown: Core.Panels.isOpen("sidebar-left") &&
                Services.Compositor.isActiveScreen(modelData)

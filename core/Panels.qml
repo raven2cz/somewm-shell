@@ -32,12 +32,14 @@ Singleton {
     // Requested tab index for dashboard (set by media/notif shortcuts, consumed by Dashboard.qml)
     property int requestedTab: -1
 
-    // Track whether any overlay panel is open (for compositor scroll-guard)
+    // Track whether any overlay panel is open (for compositor scroll-guard).
+    // Includes non-mutually-exclusive panels like sidebar-left so mouse-wheel
+    // over the panel doesn't leak to desktop tag-switching.
     readonly property bool anyOverlayOpen: {
         var panels = openPanels
-        var exclusive = ["dashboard", "wallpapers", "weather", "ai-chat"]
-        for (var i = 0; i < exclusive.length; i++) {
-            if (panels[exclusive[i]] === true) return true
+        var overlays = ["dashboard", "wallpapers", "weather", "ai-chat", "sidebar-left"]
+        for (var i = 0; i < overlays.length; i++) {
+            if (panels[overlays[i]] === true) return true
         }
         return false
     }

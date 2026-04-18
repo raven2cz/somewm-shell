@@ -15,6 +15,14 @@ PanelWindow {
     required property string edge  // "left" | "right"
     property int panelWidth: 460
 
+    // Vertical margins on the content surface. The window still spans the
+    // full height (layer-shell anchored top+bottom), but the visible/
+    // interactive area can be inset so the panel doesn't overlap with
+    // wibar or leave an asymmetric bottom gap. mask: Region { item: contentArea }
+    // keeps the top/bottom margin strips click-through.
+    property int contentTopMargin: 0
+    property int contentBottomMargin: 0
+
     // Content slot: declared on root so consumers add children correctly
     default property alias content: contentContainer.data
 
@@ -41,8 +49,9 @@ PanelWindow {
     // Content with slide animation via logical x (Region tracks logical bounds)
     Rectangle {
         id: contentArea
+        y: panel.contentTopMargin
         width: panelWidth
-        height: parent.height
+        height: parent.height - panel.contentTopMargin - panel.contentBottomMargin
         color: Core.Theme.glass1
         radius: Core.Theme.radius.lg
 
