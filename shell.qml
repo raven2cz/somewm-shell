@@ -10,6 +10,7 @@ import "modules/collage" as CollageModule
 import "modules/controlpanel" as ControlPanelModule
 import "modules/dock" as DockModule
 import "modules/hotedges" as HotEdgesModule
+import "modules/sidebar-left" as SidebarLeftModule
 
 ShellRoot {
     // Dashboard — Caelestia-style overlay with border strip + panel
@@ -50,6 +51,12 @@ ShellRoot {
 
     // Hot screen edges
     HotEdgesModule.HotEdges {}
+
+    // Left sidebar — tabbed panel (portraits gallery + future tabs)
+    Modules.ModuleLoader {
+        moduleName: "sidebar-left"
+        sourceComponent: Component { SidebarLeftModule.SidebarLeft {} }
+    }
 
     // Force NotifStore singleton instantiation at shell startup so its
     // IpcHandler (somewm-shell:notifications) registers even when no
