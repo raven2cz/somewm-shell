@@ -25,11 +25,14 @@ Item {
     property var _images: []    // absolute paths for the active collection
 
     // Seed initial collection from Services.Portraits when its scan completes.
-    // If already scanned, we pick up immediately.
+    // If already scanned, we pick up immediately. Also re-runs if the shared
+    // default collection (used by Lua notifications) loads after the panel —
+    // first-open UX should land on the user's chosen default.
     Component.onCompleted: _tryAutoSelect()
     Connections {
         target: Services.Portraits
         function onCollectionsChanged() { root._tryAutoSelect() }
+        function onDefaultCollectionChanged() { root._tryAutoSelect() }
         function onCollectionScanned(name) {
             if (name === root._currentCollection) root._reloadImages()
         }
@@ -39,13 +42,24 @@ Item {
         if (_currentCollection !== "") return
         var cols = Services.Portraits.collections
         if (!cols || cols.length === 0) return
-        // Prefer first collection with images; fallback to first
-        for (var i = 0; i < cols.length; i++) {
-            if ((cols[i].imageCount || 0) > 0) {
-                root._setCollection(cols[i].name)
+        // 1. User's configured default (shared with notifications menu)
+        var def = Services.Portraits.defaultCollection
+        if (def) {
+            for (var i = 0; i < cols.length; i++) {
+                if (cols[i].name === def) {
+                    root._setCollection(def)
+                    return
+                }
+            }
+        }
+        // 2. First collection with images
+        for (var j = 0; j < cols.length; j++) {
+            if ((cols[j].imageCount || 0) > 0) {
+                root._setCollection(cols[j].name)
                 return
             }
         }
+        // 3. First collection
         root._setCollection(cols[0].name)
     }
 

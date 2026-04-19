@@ -32,6 +32,12 @@ Singleton {
 	// Loading flag
 	property bool loading: false
 
+	// User-selected default collection (shared with the Lua-side notifications
+	// random-portrait fallback). Plain-text file written by
+	// fishlive.services.portraits:set_default(). Empty string when the file
+	// does not exist or the value does not match any scanned collection.
+	property string defaultCollection: ""
+
 	// Emitted when a specific collection's image list becomes available
 	signal collectionScanned(string name)
 
@@ -187,6 +193,21 @@ Singleton {
 		}
 	}
 
+	// === Default collection (shared with Lua notifications) ===
+
+	FileView {
+		id: defaultFile
+		path: Quickshell.env("HOME") + "/.config/somewm/.default_portrait"
+		watchChanges: true
+		onFileChanged: root._loadDefault()
+		onLoadFailed: root.defaultCollection = ""
+	}
+
+	function _loadDefault() {
+		var raw = defaultFile.text()
+		root.defaultCollection = raw ? raw.trim() : ""
+	}
+
 	// === IPC ===
 
 	IpcHandler {
@@ -195,5 +216,8 @@ Singleton {
 	}
 
 	// Initial scan on startup
-	Component.onCompleted: _scanCollections()
+	Component.onCompleted: {
+		_scanCollections()
+		_loadDefault()
+	}
 }
