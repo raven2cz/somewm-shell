@@ -1,11 +1,31 @@
 // PortraitsGallery — collection picker + Pinterest-style image grid.
 //
-// Collection dropdown feeds from Services.Portraits.collections. GridView
-// renders uniform 2:3 cells with PreserveAspectCrop images and OpacityMask
-// rounded corners; only visible delegates are alive (GridView recycles).
-// Click → qimgv as argv (Process, no shell).
+// Data source:
+//   Services.Portraits — enumerates collection subdirs and image files.
 //
-// Columns scale with panel width: ≥720 → 3 cols, ≥1100 → 4 cols, else 2.
+// First-open selection (auto):
+//   1. Services.Portraits.defaultCollection (from ~/.config/somewm/.default_portrait,
+//      shared with Lua notifications fallback — see fishlive.services.portraits).
+//   2. First collection that has imageCount > 0.
+//   3. First collection (even if empty).
+//   The default may arrive asynchronously after the fallback has been
+//   chosen; `_tryAutoSelect` is re-run on defaultCollectionChanged and
+//   upgrades the selection as long as the user has not manually picked.
+//
+// Rendering:
+//   GridView with uniform 2:3 portrait cells; PreserveAspectCrop images,
+//   GPU-masked rounded corners via MultiEffect. GridView virtualizes
+//   delegates as the user scrolls (cacheBuffer keeps a buffer alive
+//   around the viewport so scrolling stays smooth).
+//
+// Interaction:
+//   Click cell → qimgv as argv (Process, no shell).
+//   Wheel / touchpad → smooth animated contentY (dots-hyprland pattern).
+//   Columns scale with panel width: ≥1100dp → 4, ≥720dp → 3, else 2.
+//
+// File URLs:
+//   All image paths go through Core.FileUtil.fileUrl(…) so characters
+//   such as `%`, `#`, `?` in filenames survive Qt's URL parser.
 
 import QtQuick
 import QtQuick.Controls
@@ -20,18 +40,35 @@ import "../../components" as Components
 Item {
     id: root
 
-    // Internal state
+    // === Layout tuning ===
+    readonly property int comboHeight: Math.round(40 * Core.Theme.dpiScale)
+    readonly property int widthBreakpointMedium: Math.round(720 * Core.Theme.dpiScale)
+    readonly property int widthBreakpointWide: Math.round(1100 * Core.Theme.dpiScale)
+    // Scroll animation — OutExpo curve feels natural at ~400 ms; shorter
+    // reads as a jump, longer feels laggy during rapid wheel spins.
+    readonly property int scrollAnimDuration: 400
+    // Mouse wheels step in ±120 units per tick; touchpads produce smaller
+    // continuous deltas. `wheelTickUnit` is Qt's convention for ONE tick.
+    readonly property int wheelTickUnit: 120
+    // Touchpad scroll: small deltas → treat as pixel-accurate units of
+    // this size; keeps two-finger scroll smooth without runaway momentum.
+    readonly property int touchpadStepPx: Math.round(40 * Core.Theme.dpiScale)
+    // Flickable's maximum flick velocity. 3500 matches dots-hyprland's
+    // baseline; scales with DPI so hi-DPI screens keep the same feel.
+    readonly property int maxFlickVelocity: Math.round(3500 * Core.Theme.dpiScale)
+
+    // === Internal state ===
     property string _currentCollection: ""
     property var _images: []    // absolute paths for the active collection
     // True once the user explicitly picks a collection via the combobox.
     // Auto-select must not override a deliberate user choice.
     property bool _userPicked: false
 
-    // Seed initial collection from Services.Portraits when its scan completes.
-    // If already scanned, we pick up immediately. Also re-runs if the shared
-    // default collection (used by Lua notifications) loads after the panel —
-    // first-open UX should land on the user's chosen default even when the
-    // FileView resolves after the first auto-select fallback.
+    // Seed the initial collection from Services.Portraits when it finishes
+    // scanning. Also re-runs when the shared default collection (used by
+    // Lua notifications) resolves after the panel opened — first-open UX
+    // should land on the user's chosen default even if the FileView reads
+    // the state file slightly later than the directory scan.
     Component.onCompleted: _tryAutoSelect()
     Connections {
         target: Services.Portraits
@@ -76,7 +113,7 @@ Item {
         _reloadImages()
         // Keep combobox closed-state label in sync when the switch comes
         // from auto-select (user clicks update currentIndex themselves).
-        if (collectionCombo) collectionCombo._syncFromState()
+        collectionCombo._syncFromState()
     }
 
     function _reloadImages() {
@@ -89,10 +126,8 @@ Item {
 
     // === Column count based on available width ===
     readonly property int columnCount: {
-        var w = root.width
-        var dp = Core.Theme.dpiScale
-        if (w >= Math.round(1100 * dp)) return 4
-        if (w >= Math.round(720  * dp)) return 3
+        if (root.width >= widthBreakpointWide) return 4
+        if (root.width >= widthBreakpointMedium) return 3
         return 2
     }
 
@@ -125,7 +160,7 @@ Item {
             ComboBox {
                 id: collectionCombo
                 Layout.fillWidth: true
-                Layout.preferredHeight: Math.round(40 * Core.Theme.dpiScale)
+                Layout.preferredHeight: root.comboHeight
                 flat: true
                 model: Services.Portraits.collections
                 textRole: "name"
@@ -165,7 +200,7 @@ Item {
 
                 // === Displayed selection (closed state) ===
                 background: Rectangle {
-                    implicitHeight: Math.round(40 * Core.Theme.dpiScale)
+                    implicitHeight: root.comboHeight
                     color: collectionCombo.pressed
                         ? Core.Theme.glass2
                         : (collectionCombo.hovered ? Core.Theme.glass2 : Core.Theme.glass1)
@@ -313,7 +348,7 @@ Item {
             cacheBuffer: Math.round(height * 1.5)
 
             boundsBehavior: Flickable.StopAtBounds
-            maximumFlickVelocity: Math.round(3500 * Core.Theme.dpiScale)
+            maximumFlickVelocity: root.maxFlickVelocity
 
             focus: true
             keyNavigationEnabled: true
@@ -334,7 +369,7 @@ Item {
             Behavior on contentY {
                 NumberAnimation {
                     id: scrollAnim
-                    duration: 400
+                    duration: root.scrollAnimDuration
                     easing.type: Easing.OutExpo
                 }
             }
@@ -344,13 +379,13 @@ Item {
                 acceptedButtons: Qt.NoButton
                 onWheel: (wheel) => {
                     var absDelta = Math.abs(wheel.angleDelta.y)
-                    var isMouseWheel = absDelta >= 120
-                    // Mouse wheel ticks → step ~half a row (feels snappy
-                    // without jarring jumps); touchpad → small pixel deltas.
+                    var isMouseWheel = absDelta >= root.wheelTickUnit
+                    // Mouse wheel tick → ~half a row (snappy but not jarring);
+                    // touchpad → small per-pixel delta.
                     var factor = isMouseWheel
                         ? Math.round(grid.cellHeight * 0.6)
-                        : Math.round(40 * Core.Theme.dpiScale)
-                    var delta = wheel.angleDelta.y / 120
+                        : root.touchpadStepPx
+                    var delta = wheel.angleDelta.y / root.wheelTickUnit
                     var maxY = Math.max(0, grid.contentHeight - grid.height)
                     var base = scrollAnim.running ? grid._scrollTargetY : grid.contentY
                     var target = Math.max(0, Math.min(maxY, base - delta * factor))
@@ -505,10 +540,20 @@ Item {
                     anchors.fill: parent
                     spacing: Core.Theme.spacing.md
 
+                    // Show the spinner while something is actually in
+                    // flight — either the top-level directory scan, or
+                    // a per-collection image scan for the chosen one.
+                    // A collection whose scan completed with zero images
+                    // should NOT spin forever; it should display the
+                    // "Collection is empty" message below.
+                    readonly property bool awaitingCollectionScan:
+                        root._currentCollection !== "" &&
+                        !Services.Portraits.isScanned(root._currentCollection)
+
                     BusyIndicator {
                         Layout.alignment: Qt.AlignHCenter
                         running: Services.Portraits.loading ||
-                                 root._currentCollection !== ""
+                                 parent.awaitingCollectionScan
                         visible: running
                     }
 
@@ -517,9 +562,11 @@ Item {
                         horizontalAlignment: Text.AlignHCenter
                         text: Services.Portraits.loading
                             ? "Scanning portrait collections…"
-                            : (root._currentCollection === ""
-                                ? "No collections found"
-                                : "Collection is empty")
+                            : parent.awaitingCollectionScan
+                                ? "Loading collection…"
+                                : (root._currentCollection === ""
+                                    ? "No collections found"
+                                    : "Collection is empty")
                         font.family: Core.Theme.fontUI
                         font.pixelSize: Core.Theme.fontSize.sm
                         color: Core.Theme.fgDim

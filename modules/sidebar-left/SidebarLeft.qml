@@ -1,9 +1,16 @@
 // SidebarLeft — left-edge slide-in panel with tab bar.
 //
-// General-purpose multi-tab left sidebar. First tab: Portraits gallery.
-// Layer: wlr-layershell Top (above regular windows, below overlays).
-// Width: narrow (460) ↔ extended (900) toggled via header button.
-// Escape key closes via FocusScope (Keys cannot attach to PanelWindow).
+// General-purpose multi-tab left sidebar. Currently hosts a single tab
+// (Portraits gallery); the TabBar structure is kept so further tabs can
+// be added without touching the panel chrome.
+//
+// Layer:   wlr-layershell Top (above regular windows, below overlays).
+// Width:   narrow (460dp) ↔ extended (900dp), toggled via header button.
+// Edge:    left (slides in from the screen edge).
+// Close:   click × button, Escape key (via FocusScope — Keys cannot
+//          attach directly to PanelWindow), or IPC toggle.
+// Screens: only rendered on the active screen to avoid duplicates
+//          across multi-monitor setups.
 
 import QtQuick
 import QtQuick.Layouts
@@ -117,6 +124,12 @@ Variants {
                 }
 
                 // === Content area: lazy-loaded tabs ===
+                //
+                // Each tab is a Loader keyed on `panel.currentTab`. A tab
+                // exists only while its Loader is active — switching tabs
+                // destroys the previous one and frees its scene graph.
+                // (Tab 0 is active on first open, so the default tab is
+                // constructed immediately.)
                 Item {
                     id: content
                     Layout.fillWidth: true
@@ -126,7 +139,6 @@ Variants {
                         id: portraitsLoader
                         anchors.fill: parent
                         active: panel.currentTab === 0
-                        visible: active
                         sourceComponent: Component { PortraitsGallery {} }
                     }
                 }

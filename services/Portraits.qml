@@ -4,7 +4,24 @@ pragma Singleton
 //
 // Scans `basePath` (from config) for collection subdirs, lazily enumerates
 // images per collection, and exposes random/indexed lookup helpers.
-// IPC: somewm-shell:portraits { refresh }
+//
+// State:
+//   collections       [{name, path, imageCount}] — updated twice: once
+//                     after the directory listing (imageCount=0), once
+//                     after per-collection image counts are resolved.
+//   defaultCollection string — name of the user's chosen default,
+//                     read from ~/.config/somewm/.default_portrait
+//                     (plain-text, one line, written by the Lua menu
+//                     fishlive.services.portraits:set_default).
+//   loading           bool — true while the initial directory scan is
+//                     in flight; independent of per-collection scans.
+//
+// Signals:
+//   collectionScanned(name) — per-collection image list is available
+//                             in the cache (first time after load).
+//
+// IPC:
+//   somewm-shell:portraits { refresh } — clear caches and rescan.
 
 import QtQuick
 import Quickshell
@@ -43,9 +60,12 @@ Singleton {
 
 	// === Public API ===
 
+	// Return cached image list for `name`, or `[]` while the scan is in
+	// flight. The per-collection scan is async — callers should listen
+	// for `collectionScanned(name)` (or poll `isScanned(name)`) to pick
+	// up the populated list on a subsequent call.
 	function getImagesForCollection(name) {
 		if (_imageCache[name]) return _imageCache[name]
-		// Not cached yet — trigger scan, return empty
 		_scanCollection(name)
 		return []
 	}
@@ -66,6 +86,13 @@ Singleton {
 	function imageCount(collection) {
 		var imgs = _imageCache[collection]
 		return imgs ? imgs.length : 0
+	}
+
+	// True once the image list for `collection` has been resolved (even
+	// if the collection turned out to be empty). Callers use this to
+	// distinguish "scan still running" from "scan done, zero images".
+	function isScanned(collection) {
+		return _imageCache.hasOwnProperty(collection)
 	}
 
 	function refresh() {
@@ -96,14 +123,16 @@ Singleton {
 				})
 				root.collections = result
 				root.loading = false
-				// Count images per collection
-				if (result.length > 0) _countProc_start()
+				// Kick off per-collection image counts so the UI can
+				// show badges and pick a non-empty collection as the
+				// auto-select fallback.
+				if (result.length > 0) _startCountProc()
 			}
 		}
 	}
 
-	// Count images per collection via a single find call
-	function _countProc_start() {
+	// Count images per collection via a single `find` invocation.
+	function _startCountProc() {
 		countProc.command = ["bash", "-c",
 			"for d in \"$1\"/*/; do " +
 			"n=$(find -L \"$d\" -maxdepth 1 -type f " +
@@ -194,9 +223,16 @@ Singleton {
 	}
 
 	// === Default collection (shared with Lua notifications) ===
-	// Reading the plain-text state file via `cat` (Process). FileView proved
-	// unreliable for initial sync read of hidden dot-files; Process gives us
-	// deterministic content on startup and on explicit reload.
+	//
+	// The default is a single line of plain text at
+	//   ~/.config/somewm/.default_portrait
+	// and is written by the Lua menu (Super+Shift+P →
+	// fishlive.services.portraits:set_default). We read it via a Process
+	// (`cat`) because FileView.text() on a hidden dot-file returned empty
+	// synchronously on first access and `onFileChanged` never fired for
+	// the initial load, leading to a misdetected "no default" on startup.
+	// FileView is kept solely as a change watcher so that flipping the
+	// default via the Lua menu updates the Qt side live.
 
 	readonly property string _defaultFilePath:
 		Quickshell.env("HOME") + "/.config/somewm/.default_portrait"
@@ -215,13 +251,17 @@ Singleton {
 		defaultProc.running = true
 	}
 
-	// Watch the file so switching the default via Lua menu updates live.
 	FileView {
 		id: defaultWatch
 		path: root._defaultFilePath
 		watchChanges: true
 		onFileChanged: root._loadDefault()
-		onLoadFailed: root._loadDefault()  // file may appear later
+		// Both "file missing" and "FileView couldn't decode this
+		// hidden dot-file" flow through here. Re-run `cat` rather
+		// than clearing directly — if the file genuinely exists,
+		// the Process will succeed and set the value; if not, cat
+		// returns empty and the StdioCollector assigns "".
+		onLoadFailed: root._loadDefault()
 	}
 
 	// === IPC ===
