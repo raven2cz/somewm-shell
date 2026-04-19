@@ -26,7 +26,15 @@ PanelWindow {
     // Content slot: declared on root so consumers add children correctly
     default property alias content: contentContainer.data
 
-    visible: shown || slideAnim.running
+    // Off-screen x target for the "closed" state.
+    readonly property real _closedX: edge === "left" ? -panelWidth : panelWidth
+
+    // Visible while the content area is anywhere on-screen. We deliberately
+    // do NOT use `shown || slideAnim.running` — `shown` flips synchronously,
+    // while `slideAnim.running` only becomes true on the next frame when
+    // the Behavior kicks in. That one-frame gap hides the window and causes
+    // a flicker right before the close animation plays.
+    visible: shown || contentArea.x !== _closedX
     color: "transparent"
     focusable: shown
 
