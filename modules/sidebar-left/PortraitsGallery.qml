@@ -23,11 +23,15 @@ Item {
     // Internal state
     property string _currentCollection: ""
     property var _images: []    // absolute paths for the active collection
+    // True once the user explicitly picks a collection via the combobox.
+    // Auto-select must not override a deliberate user choice.
+    property bool _userPicked: false
 
     // Seed initial collection from Services.Portraits when its scan completes.
     // If already scanned, we pick up immediately. Also re-runs if the shared
     // default collection (used by Lua notifications) loads after the panel —
-    // first-open UX should land on the user's chosen default.
+    // first-open UX should land on the user's chosen default even when the
+    // FileView resolves after the first auto-select fallback.
     Component.onCompleted: _tryAutoSelect()
     Connections {
         target: Services.Portraits
@@ -39,19 +43,22 @@ Item {
     }
 
     function _tryAutoSelect() {
-        if (_currentCollection !== "") return
+        if (_userPicked) return
         var cols = Services.Portraits.collections
         if (!cols || cols.length === 0) return
-        // 1. User's configured default (shared with notifications menu)
+        // 1. User's configured default (shared with notifications menu).
+        //    Upgrade from an earlier fallback if default arrives later.
         var def = Services.Portraits.defaultCollection
         if (def) {
             for (var i = 0; i < cols.length; i++) {
                 if (cols[i].name === def) {
-                    root._setCollection(def)
+                    if (_currentCollection !== def) root._setCollection(def)
                     return
                 }
             }
         }
+        // No default yet — only do a fallback pick if we haven't chosen one.
+        if (_currentCollection !== "") return
         // 2. First collection with images
         for (var j = 0; j < cols.length; j++) {
             if ((cols[j].imageCount || 0) > 0) {
@@ -67,6 +74,9 @@ Item {
         if (name === _currentCollection) return
         _currentCollection = name
         _reloadImages()
+        // Keep combobox closed-state label in sync when the switch comes
+        // from auto-select (user clicks update currentIndex themselves).
+        if (collectionCombo) collectionCombo._syncFromState()
     }
 
     function _reloadImages() {
@@ -127,21 +137,30 @@ Item {
                     if (!model) return
                     _syncing = true
                     var target = root._currentCollection
-                    for (var i = 0; i < model.length; i++) {
-                        if (model[i].name === target) {
-                            currentIndex = i
-                            break
+                    var found = -1
+                    if (target !== "") {
+                        for (var i = 0; i < model.length; i++) {
+                            if (model[i].name === target) {
+                                found = i
+                                break
+                            }
                         }
                     }
+                    currentIndex = found
                     _syncing = false
                 }
                 Component.onCompleted: _syncFromState()
                 onModelChanged: _syncFromState()
 
-                onCurrentIndexChanged: {
-                    if (_syncing) return
-                    if (currentIndex < 0 || !model || !model[currentIndex]) return
-                    root._setCollection(model[currentIndex].name)
+                // Use `activated` (user chose via click/keyboard) — NOT
+                // `currentIndexChanged`, which also fires when Qt auto-sets
+                // currentIndex=0 as the model populates and would falsely
+                // flip _userPicked, blocking the async default-collection
+                // upgrade.
+                onActivated: (index) => {
+                    if (index < 0 || !model || !model[index]) return
+                    root._userPicked = true
+                    root._setCollection(model[index].name)
                 }
 
                 // === Displayed selection (closed state) ===

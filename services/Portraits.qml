@@ -194,18 +194,34 @@ Singleton {
 	}
 
 	// === Default collection (shared with Lua notifications) ===
+	// Reading the plain-text state file via `cat` (Process). FileView proved
+	// unreliable for initial sync read of hidden dot-files; Process gives us
+	// deterministic content on startup and on explicit reload.
 
-	FileView {
-		id: defaultFile
-		path: Quickshell.env("HOME") + "/.config/somewm/.default_portrait"
-		watchChanges: true
-		onFileChanged: root._loadDefault()
-		onLoadFailed: root.defaultCollection = ""
+	readonly property string _defaultFilePath:
+		Quickshell.env("HOME") + "/.config/somewm/.default_portrait"
+
+	Process {
+		id: defaultProc
+		stdout: StdioCollector {
+			onStreamFinished: {
+				root.defaultCollection = text ? text.trim() : ""
+			}
+		}
 	}
 
 	function _loadDefault() {
-		var raw = defaultFile.text()
-		root.defaultCollection = raw ? raw.trim() : ""
+		defaultProc.command = ["cat", root._defaultFilePath]
+		defaultProc.running = true
+	}
+
+	// Watch the file so switching the default via Lua menu updates live.
+	FileView {
+		id: defaultWatch
+		path: root._defaultFilePath
+		watchChanges: true
+		onFileChanged: root._loadDefault()
+		onLoadFailed: root._loadDefault()  // file may appear later
 	}
 
 	// === IPC ===
