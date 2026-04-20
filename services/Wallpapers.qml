@@ -921,6 +921,14 @@ Singleton {
     // unscoped baseline.
     function setWallpaperForScreen(screenName, tagName, path, scope) {
         if (!path || !tagName) return
+        // Refuse-if-busy: the singleton Process holds mutable _screenName;
+        // starting a second request while the first is in flight would
+        // clobber that state and refresh the wrong screen's caches. The
+        // UI retries on its next user action.
+        if (saveToThemeForScreenProc.running) {
+            console.warn("Wallpapers: saveToTheme already in flight, dropping request for", screenName)
+            return
+        }
         var safePath = _luaEscape(path)
         var safeTag  = _luaEscape(tagName)
         var safeScope = _luaEscape(scope || "")
@@ -950,6 +958,10 @@ Singleton {
     // scope on a specific screen.
     function clearUserWallpaperForScreen(screenName, tagName, scope) {
         if (!tagName) return
+        if (clearUserWpForScreenProc.running) {
+            console.warn("Wallpapers: clearUserWallpaper already in flight, dropping request for", screenName)
+            return
+        }
         var safeTag = _luaEscape(tagName)
         var safeScope = _luaEscape(scope || "")
         clearUserWpForScreenProc.command = ["somewm-client", "eval",
@@ -998,6 +1010,10 @@ Singleton {
     // Add manual scope to a screen (LIFO — prepend, newest wins).
     function addScopeToScreen(screenName, scope) {
         if (!scope) return
+        if (addScopeProc.running) {
+            console.warn("Wallpapers: addScope already in flight, dropping request for", screenName)
+            return
+        }
         var safeName  = _luaEscape(screenName)
         var safeScope = _luaEscape(scope)
         addScopeProc.command = ["somewm-client", "eval",
@@ -1023,6 +1039,10 @@ Singleton {
     // Remove manual scope from a screen.
     function removeScopeFromScreen(screenName, scope) {
         if (!scope) return
+        if (removeScopeProc.running) {
+            console.warn("Wallpapers: removeScope already in flight, dropping request for", screenName)
+            return
+        }
         var safeName  = _luaEscape(screenName)
         var safeScope = _luaEscape(scope)
         removeScopeProc.command = ["somewm-client", "eval",
