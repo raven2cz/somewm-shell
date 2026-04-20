@@ -34,7 +34,29 @@ Singleton {
     }
 
     // Per-tag override map from compositor { "1": "/path/...", ... }
+    // Legacy singleton form — reflects focused screen's primary scope.
     property var overrides: ({})
+
+    // === Per-screen state (scope-aware picker, plan §7) ===
+    // Each map is keyed by screen.name (e.g. "DP-2"). Panel bindings read
+    // by their own PanelWindow.screen.name, so multi-monitor doesn't
+    // cross-contaminate via the focused-screen singleton.
+
+    // Resolved wallpapers list per screen (theme view) — array of
+    // { path, name, tag, isUserOverride } objects.
+    property var wallpapersByScreen: ({})
+    // Per-tag overrides for each screen's primary scope.
+    property var overridesByScreen: ({})
+    // Active scope list per screen — ordered (primary first).
+    property var scopesByScreen: ({})
+    // Tag list per screen — screens can have different tag configs.
+    property var tagsByScreen: ({})
+    // Currently selected tag per screen.
+    property var selectedTagByScreen: ({})
+    // Current wallpaper path per screen.
+    property var currentByScreen: ({})
+    // Every scope name known to the system (auto + manual across screens).
+    property var registeredScopes: []
 
     // === Folder browsing ===
 
@@ -637,6 +659,390 @@ Singleton {
         target: "somewm-shell:wallpapers"
         function switchTheme(name: string): void { root.switchTheme(name) }
         function reloadTheme(): void             { themeExportProc.running = true }
+    }
+
+    // ================================================================
+    // Per-screen API (scope-aware picker — plan §7)
+    // ================================================================
+
+    // --- Getters (QML-friendly accessors for panel bindings) ---
+
+    function scopesFor(screenName) {
+        return root.scopesByScreen[screenName] || []
+    }
+    function overridesFor(screenName) {
+        return root.overridesByScreen[screenName] || {}
+    }
+    function wallpapersFor(screenName) {
+        return root.wallpapersByScreen[screenName] || []
+    }
+    function tagsFor(screenName) {
+        var t = root.tagsByScreen[screenName]
+        return (t && t.length > 0) ? t : root.tagList
+    }
+    function selectedTagFor(screenName) {
+        return root.selectedTagByScreen[screenName] || ""
+    }
+    function currentFor(screenName) {
+        return root.currentByScreen[screenName] || ""
+    }
+
+    // --- Per-screen refreshers ---
+
+    // Refresh all per-screen caches needed when a panel opens.
+    function refreshForScreen(screenName) {
+        if (!screenName) return
+        refreshActiveScopesForScreen(screenName)
+        refreshTagsForScreen(screenName)
+        refreshSelectedTagForScreen(screenName)
+        refreshCurrentForScreen(screenName)
+        refreshOverridesForScreen(screenName)
+        refreshRegisteredScopes()
+    }
+
+    // Helper: parse `screen\tjson` prefixed body. Lua returns `screen\t...`
+    // so back-to-back refreshes can't clobber each other's results — the
+    // output is self-describing. `body` already has the trailing "OK\n"
+    // stripped (caller drops leading status line).
+    function _splitScreenPayload(body) {
+        var tab = body.indexOf("\t")
+        if (tab < 0) return { name: "", payload: body }
+        return { name: body.substring(0, tab), payload: body.substring(tab + 1) }
+    }
+
+    function refreshActiveScopesForScreen(screenName) {
+        scopesForScreenProc.command = ["somewm-client", "eval",
+            "return '" + _luaEscape(screenName) +
+            "\\t' .. require('fishlive.services.wallpaper').get_active_scopes_json('" +
+            _luaEscape(screenName) + "')"]
+        scopesForScreenProc.running = true
+    }
+
+    Process {
+        id: scopesForScreenProc
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var raw = text.trim()
+                var nl = raw.indexOf("\n")
+                var body = nl >= 0 ? raw.substring(nl + 1) : raw
+                var split = root._splitScreenPayload(body)
+                if (!split.name) return
+                try {
+                    var list = JSON.parse(split.payload)
+                    var next = Object.assign({}, root.scopesByScreen)
+                    next[split.name] = list
+                    root.scopesByScreen = next
+                } catch (e) {
+                    console.error("scopes parse error for", split.name, ":", e)
+                }
+            }
+        }
+    }
+
+    function refreshOverridesForScreen(screenName) {
+        overridesForScreenProc.command = ["somewm-client", "eval",
+            "return '" + _luaEscape(screenName) +
+            "\\t' .. require('fishlive.services.wallpaper').get_overrides_json('" +
+            _luaEscape(screenName) + "')"]
+        overridesForScreenProc.running = true
+    }
+
+    Process {
+        id: overridesForScreenProc
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var raw = text.trim()
+                var nl = raw.indexOf("\n")
+                var body = nl >= 0 ? raw.substring(nl + 1) : raw
+                var split = root._splitScreenPayload(body)
+                if (!split.name) return
+                try {
+                    var map = JSON.parse(split.payload)
+                    var next = Object.assign({}, root.overridesByScreen)
+                    next[split.name] = map
+                    root.overridesByScreen = next
+                } catch (e) {
+                    var next2 = Object.assign({}, root.overridesByScreen)
+                    next2[split.name] = {}
+                    root.overridesByScreen = next2
+                }
+            }
+        }
+    }
+
+    function refreshTagsForScreen(screenName) {
+        tagsForScreenProc.command = ["somewm-client", "eval",
+            "return '" + _luaEscape(screenName) +
+            "\\t' .. require('fishlive.services.wallpaper').get_tags_json('" +
+            _luaEscape(screenName) + "')"]
+        tagsForScreenProc.running = true
+    }
+
+    Process {
+        id: tagsForScreenProc
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var raw = text.trim()
+                var nl = raw.indexOf("\n")
+                var body = nl >= 0 ? raw.substring(nl + 1) : raw
+                var split = root._splitScreenPayload(body)
+                if (!split.name) return
+                try {
+                    var list = JSON.parse(split.payload)
+                    var next = Object.assign({}, root.tagsByScreen)
+                    next[split.name] = list
+                    root.tagsByScreen = next
+                } catch (e) {
+                    // keep previous value on parse error
+                }
+            }
+        }
+    }
+
+    function refreshSelectedTagForScreen(screenName) {
+        selectedTagForScreenProc.command = ["somewm-client", "eval",
+            "for s in screen do if s.name == '" + _luaEscape(screenName) +
+            "' then local t = s.selected_tag; return '" + _luaEscape(screenName) +
+            "\\t' .. (t and t.name or '1') end end; return '" +
+            _luaEscape(screenName) + "\\t1'"]
+        selectedTagForScreenProc.running = true
+    }
+
+    Process {
+        id: selectedTagForScreenProc
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var raw = text.trim()
+                var nl = raw.indexOf("\n")
+                var body = nl >= 0 ? raw.substring(nl + 1) : raw
+                var split = root._splitScreenPayload(body)
+                if (!split.name || split.payload === "OK") return
+                var next = Object.assign({}, root.selectedTagByScreen)
+                next[split.name] = split.payload
+                root.selectedTagByScreen = next
+            }
+        }
+    }
+
+    function refreshCurrentForScreen(screenName) {
+        currentForScreenProc.command = ["somewm-client", "eval",
+            "return '" + _luaEscape(screenName) +
+            "\\t' .. require('fishlive.services.wallpaper').get_current('" +
+            _luaEscape(screenName) + "')"]
+        currentForScreenProc.running = true
+    }
+
+    Process {
+        id: currentForScreenProc
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var raw = text.trim()
+                var nl = raw.indexOf("\n")
+                var body = nl >= 0 ? raw.substring(nl + 1) : raw
+                var split = root._splitScreenPayload(body)
+                if (!split.name) return
+                // Empty path is valid — hotplug/unknown output — write it
+                // through so stale state doesn't linger on the UI side.
+                var path = split.payload === "OK" ? "" : split.payload
+                var next = Object.assign({}, root.currentByScreen)
+                next[split.name] = path
+                root.currentByScreen = next
+            }
+        }
+    }
+
+    function refreshResolvedForScreen(screenName) {
+        resolvedForScreenProc.command = ["somewm-client", "eval",
+            "return '" + _luaEscape(screenName) +
+            "\\t' .. require('fishlive.services.wallpaper').get_resolved_json('" +
+            _luaEscape(screenName) + "')"]
+        resolvedForScreenProc.running = true
+    }
+
+    Process {
+        id: resolvedForScreenProc
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var raw = text.trim()
+                var nl = raw.indexOf("\n")
+                var body = nl >= 0 ? raw.substring(nl + 1) : raw
+                var split = root._splitScreenPayload(body)
+                if (!split.name) return
+                try {
+                    var items = JSON.parse(split.payload)
+                    var list = items.filter(function(item) {
+                        return item.path && item.path !== ""
+                    }).map(function(item) {
+                        return {
+                            path: item.path,
+                            name: item.path.split("/").pop(),
+                            tag: item.tag,
+                            isUserOverride: item.isUserOverride
+                        }
+                    })
+                    var next = Object.assign({}, root.wallpapersByScreen)
+                    next[split.name] = list
+                    root.wallpapersByScreen = next
+                } catch (e) {
+                    console.error("Per-screen resolved parse error for", split.name, ":", e)
+                }
+            }
+        }
+    }
+
+    function refreshRegisteredScopes() {
+        registeredScopesProc.running = true
+    }
+
+    Process {
+        id: registeredScopesProc
+        command: ["somewm-client", "eval",
+            "return require('fishlive.services.wallpaper').get_registered_scopes_json()"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var raw = text.trim()
+                var nl = raw.indexOf("\n")
+                var json = nl >= 0 ? raw.substring(nl + 1) : raw
+                try {
+                    root.registeredScopes = JSON.parse(json)
+                } catch (e) {
+                    root.registeredScopes = []
+                }
+            }
+        }
+    }
+
+    // --- Per-screen writers (scope-aware; scope arg freezes priority at
+    //     panel-open time, avoiding focus-drift misfires). ---
+
+    // Save a wallpaper to a specific scope/tag. The Lua service reapplies
+    // on every screen whose active scope set matches; we just refresh the
+    // QS caches for the screen that initiated the save. scope === "" =
+    // unscoped baseline.
+    function setWallpaperForScreen(screenName, tagName, path, scope) {
+        if (!path || !tagName) return
+        var safePath = _luaEscape(path)
+        var safeTag  = _luaEscape(tagName)
+        var safeScope = _luaEscape(scope || "")
+        saveToThemeForScreenProc.command = ["somewm-client", "eval",
+            "require('fishlive.services.wallpaper').save_to_theme('" +
+            safeTag + "', '" + safePath + "', '" + safeScope + "')"]
+        saveToThemeForScreenProc._screenName = screenName
+        saveToThemeForScreenProc.running = true
+    }
+
+    Process {
+        id: saveToThemeForScreenProc
+        property string _screenName: ""
+        onRunningChanged: {
+            if (!running) {
+                if (root.applyTheme) themeExportProc.running = true
+                if (_screenName) {
+                    root.refreshCurrentForScreen(_screenName)
+                    root.refreshOverridesForScreen(_screenName)
+                    if (root.isThemeView) root.refreshResolvedForScreen(_screenName)
+                }
+            }
+        }
+    }
+
+    // Clear user-wallpaper file (revert to theme default) for a specific
+    // scope on a specific screen.
+    function clearUserWallpaperForScreen(screenName, tagName, scope) {
+        if (!tagName) return
+        var safeTag = _luaEscape(tagName)
+        var safeScope = _luaEscape(scope || "")
+        clearUserWpForScreenProc.command = ["somewm-client", "eval",
+            "require('fishlive.services.wallpaper').clear_user_wallpaper('" +
+            safeTag + "', '" + safeScope + "')"]
+        clearUserWpForScreenProc._screenName = screenName
+        clearUserWpForScreenProc.running = true
+    }
+
+    Process {
+        id: clearUserWpForScreenProc
+        property string _screenName: ""
+        onRunningChanged: {
+            if (!running && _screenName) {
+                root.refreshCurrentForScreen(_screenName)
+                root.refreshOverridesForScreen(_screenName)
+                if (root.isThemeView) root.refreshResolvedForScreen(_screenName)
+            }
+        }
+    }
+
+    function viewTagOnScreen(screenName, tagName) {
+        var safeName = _luaEscape(screenName)
+        var safeTag  = _luaEscape(tagName)
+        // Optimistic update so chip highlight moves without round-trip delay.
+        var next = Object.assign({}, root.selectedTagByScreen)
+        next[screenName] = tagName
+        root.selectedTagByScreen = next
+        viewTagOnScreenProc.command = ["somewm-client", "eval",
+            "require('fishlive.services.wallpaper').view_tag_on_screen('" +
+            safeName + "', '" + safeTag + "')"]
+        viewTagOnScreenProc._screenName = screenName
+        viewTagOnScreenProc.running = true
+    }
+
+    Process {
+        id: viewTagOnScreenProc
+        property string _screenName: ""
+        onRunningChanged: {
+            if (!running && _screenName) {
+                root.refreshCurrentForScreen(_screenName)
+            }
+        }
+    }
+
+    // Add manual scope to a screen (LIFO — prepend, newest wins).
+    function addScopeToScreen(screenName, scope) {
+        if (!scope) return
+        var safeName  = _luaEscape(screenName)
+        var safeScope = _luaEscape(scope)
+        addScopeProc.command = ["somewm-client", "eval",
+            "require('fishlive.services.wallpaper').add_scope_to_screen('" +
+            safeName + "', '" + safeScope + "')"]
+        addScopeProc._screenName = screenName
+        addScopeProc.running = true
+    }
+
+    Process {
+        id: addScopeProc
+        property string _screenName: ""
+        onRunningChanged: {
+            if (!running && _screenName) {
+                root.refreshActiveScopesForScreen(_screenName)
+                root.refreshRegisteredScopes()
+                root.refreshCurrentForScreen(_screenName)
+                if (root.isThemeView) root.refreshResolvedForScreen(_screenName)
+            }
+        }
+    }
+
+    // Remove manual scope from a screen.
+    function removeScopeFromScreen(screenName, scope) {
+        if (!scope) return
+        var safeName  = _luaEscape(screenName)
+        var safeScope = _luaEscape(scope)
+        removeScopeProc.command = ["somewm-client", "eval",
+            "require('fishlive.services.wallpaper').remove_scope_from_screen('" +
+            safeName + "', '" + safeScope + "')"]
+        removeScopeProc._screenName = screenName
+        removeScopeProc.running = true
+    }
+
+    Process {
+        id: removeScopeProc
+        property string _screenName: ""
+        onRunningChanged: {
+            if (!running && _screenName) {
+                root.refreshActiveScopesForScreen(_screenName)
+                root.refreshRegisteredScopes()
+                root.refreshCurrentForScreen(_screenName)
+                if (root.isThemeView) root.refreshResolvedForScreen(_screenName)
+            }
+        }
     }
 
     Component.onCompleted: {

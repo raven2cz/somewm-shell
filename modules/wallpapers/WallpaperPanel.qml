@@ -49,8 +49,40 @@ Variants {
         property int scrollAccum: 0
         readonly property int scrollThreshold: 300
 
+        // === Per-screen scope binding (plan §7) ===
+        // Panel is bound to the screen it renders on; writer actions freeze
+        // the scope at open time to avoid focus-drift misfires.
+        readonly property string panelScreenName: modelData ? (modelData.name || "") : ""
+        readonly property var panelScopes: panelScreenName
+            ? Services.Wallpapers.scopesFor(panelScreenName)
+            : []
+        readonly property string panelSelectedTag: panelScreenName
+            ? (Services.Wallpapers.selectedTagFor(panelScreenName) || "1")
+            : (Services.Wallpapers.selectedTag || "1")
+        readonly property var panelTagList: panelScreenName
+            ? Services.Wallpapers.tagsFor(panelScreenName)
+            : Services.Wallpapers.tagList
+        readonly property var panelOverrides: panelScreenName
+            ? Services.Wallpapers.overridesFor(panelScreenName)
+            : Services.Wallpapers.overrides
+        readonly property string panelCurrentWallpaper: panelScreenName
+            ? (Services.Wallpapers.currentFor(panelScreenName)
+               || Services.Wallpapers.currentWallpaper)
+            : Services.Wallpapers.currentWallpaper
+        // Carousel model: theme view = per-screen resolved, folder = shared scan
+        readonly property var carouselModel: {
+            if (Services.Wallpapers.isThemeView && panelScreenName) {
+                return Services.Wallpapers.wallpapersFor(panelScreenName)
+            }
+            return Services.Wallpapers.wallpapers
+        }
+        // activeEditScope: scope that writer actions target. "" = Base.
+        // Set to primary scope on open; user can click chips to change.
+        property string activeEditScope: ""
+        property bool addScopePopupOpen: false
+
         function stepToNext(direction) {
-            var model = Services.Wallpapers.wallpapers
+            var model = panel.carouselModel
             if (!model || model.length === 0) return
             var next = view.currentIndex + direction
             if (next >= 0 && next < model.length) {
@@ -58,28 +90,74 @@ Variants {
             }
         }
 
+        function _ensureActiveEditScope() {
+            // Default to primary scope on panel open; Base ("") if none
+            if (panelScopes && panelScopes.length > 0) {
+                // If current selection not in scopes anymore, snap to primary
+                var found = false
+                for (var i = 0; i < panelScopes.length; i++) {
+                    if (panelScopes[i] === activeEditScope) { found = true; break }
+                }
+                if (!found && activeEditScope !== "") activeEditScope = panelScopes[0]
+                if (activeEditScope === "" && !_baseExplicitlySelected) activeEditScope = panelScopes[0]
+            } else {
+                // All scopes removed — snap to Base so writer calls never
+                // target a stale non-active scope.
+                if (activeEditScope !== "") activeEditScope = ""
+            }
+        }
+        // Track whether user explicitly clicked "Base" chip (to distinguish
+        // from the initial empty default).
+        property bool _baseExplicitlySelected: false
+
         onShouldShowChanged: {
             if (shouldShow) {
                 initialFocusSet = false
+                _baseExplicitlySelected = false
+                // Seed activeEditScope from cached scopes synchronously so
+                // writer actions during the refresh window don't silently
+                // fall through to Base. The follow-up _ensureActiveEditScope
+                // after the refresh completes will re-snap if the list has
+                // changed shape.
+                var cachedScopes = panelScreenName
+                    ? (Services.Wallpapers.scopesFor(panelScreenName) || [])
+                    : []
+                activeEditScope = cachedScopes.length > 0 ? cachedScopes[0] : ""
                 view.forceActiveFocus()
-                Services.Wallpapers.refreshSelectedTag()
+                if (panelScreenName) {
+                    Services.Wallpapers.refreshForScreen(panelScreenName)
+                    if (Services.Wallpapers.isThemeView)
+                        Services.Wallpapers.refreshResolvedForScreen(panelScreenName)
+                } else {
+                    Services.Wallpapers.refreshSelectedTag()
+                }
                 Services.Wallpapers.refreshBrowseFolders()
+                _ensureActiveEditScope()
                 _focusCurrentWallpaper()
             }
         }
 
-        // Re-focus carousel when current wallpaper changes (e.g. after tag switch)
+        // Re-focus carousel + seed edit scope when per-screen state updates
         Connections {
             target: Services.Wallpapers
             function onCurrentWallpaperChanged() {
                 if (panel.shouldShow) panel._focusCurrentWallpaper()
             }
+            function onCurrentByScreenChanged() {
+                if (panel.shouldShow) panel._focusCurrentWallpaper()
+            }
+            function onScopesByScreenChanged() {
+                panel._ensureActiveEditScope()
+            }
+            function onWallpapersByScreenChanged() {
+                if (panel.shouldShow) panel._focusCurrentWallpaper()
+            }
         }
 
         function _focusCurrentWallpaper() {
-            var model = Services.Wallpapers.wallpapers
+            var model = panel.carouselModel
             if (!model) return
-            var current = Services.Wallpapers.currentWallpaper
+            var current = panel.panelCurrentWallpaper
             for (var i = 0; i < model.length; i++) {
                 if (model[i].path === current) {
                     view.currentIndex = i
@@ -102,23 +180,37 @@ Variants {
         Shortcut {
             sequence: "Return"
             onActivated: {
-                var model = Services.Wallpapers.wallpapers
-                if (view.currentIndex >= 0 && view.currentIndex < model.length) {
-                    Services.Wallpapers.setWallpaper(model[view.currentIndex].path)
+                var model = panel.carouselModel
+                if (view.currentIndex < 0 || view.currentIndex >= model.length) return
+                var item = model[view.currentIndex]
+                if (panel.panelScreenName) {
+                    Services.Wallpapers.setWallpaperForScreen(
+                        panel.panelScreenName, panel.panelSelectedTag,
+                        item.path, panel.activeEditScope)
+                } else {
+                    Services.Wallpapers.setWallpaper(item.path)
                 }
             }
         }
 
+        function _viewTag(tagName) {
+            if (panel.panelScreenName) {
+                Services.Wallpapers.viewTagOnScreen(panel.panelScreenName, tagName)
+            } else {
+                Services.Wallpapers.viewTag(tagName)
+            }
+        }
+
         // Tag selection: 1-9
-        Shortcut { sequence: "1"; onActivated: Services.Wallpapers.viewTag("1") }
-        Shortcut { sequence: "2"; onActivated: Services.Wallpapers.viewTag("2") }
-        Shortcut { sequence: "3"; onActivated: Services.Wallpapers.viewTag("3") }
-        Shortcut { sequence: "4"; onActivated: Services.Wallpapers.viewTag("4") }
-        Shortcut { sequence: "5"; onActivated: Services.Wallpapers.viewTag("5") }
-        Shortcut { sequence: "6"; onActivated: Services.Wallpapers.viewTag("6") }
-        Shortcut { sequence: "7"; onActivated: Services.Wallpapers.viewTag("7") }
-        Shortcut { sequence: "8"; onActivated: Services.Wallpapers.viewTag("8") }
-        Shortcut { sequence: "9"; onActivated: Services.Wallpapers.viewTag("9") }
+        Shortcut { sequence: "1"; onActivated: panel._viewTag("1") }
+        Shortcut { sequence: "2"; onActivated: panel._viewTag("2") }
+        Shortcut { sequence: "3"; onActivated: panel._viewTag("3") }
+        Shortcut { sequence: "4"; onActivated: panel._viewTag("4") }
+        Shortcut { sequence: "5"; onActivated: panel._viewTag("5") }
+        Shortcut { sequence: "6"; onActivated: panel._viewTag("6") }
+        Shortcut { sequence: "7"; onActivated: panel._viewTag("7") }
+        Shortcut { sequence: "8"; onActivated: panel._viewTag("8") }
+        Shortcut { sequence: "9"; onActivated: panel._viewTag("9") }
 
         // Folder navigation: Up/Down
         function _navigateFolder(folder) {
@@ -159,17 +251,26 @@ Variants {
             }
         }
 
-        // Delete key: reset user-wallpaper override in theme view
+        // Delete key: reset user-wallpaper override in theme view.
+        // isUserOverride is computed against the screen's PRIMARY scope
+        // in get_resolved_json — so reset must target primary too, not
+        // activeEditScope (else badge + delete target different buckets).
         Shortcut {
             sequence: "Delete"
             onActivated: {
                 if (!Services.Wallpapers.isThemeView) return
-                var model = Services.Wallpapers.wallpapers
+                var model = panel.carouselModel
                 var idx = view.currentIndex
                 if (idx < 0 || idx >= model.length) return
                 var item = model[idx]
-                if (item.isUserOverride && item.tag)
+                if (!item.isUserOverride || !item.tag) return
+                if (panel.panelScreenName) {
+                    var primaryScope = panel.panelScopes.length > 0 ? panel.panelScopes[0] : ""
+                    Services.Wallpapers.clearUserWallpaperForScreen(
+                        panel.panelScreenName, item.tag, primaryScope)
+                } else {
                     Services.Wallpapers.clearUserWallpaper(item.tag)
+                }
             }
         }
 
@@ -451,8 +552,8 @@ Variants {
                 anchors.right: parent.right
                 anchors.top: topBar.bottom
                 anchors.topMargin: Math.round(30 * panel.sp)
-                anchors.bottom: tagBar.top
-                anchors.bottomMargin: Math.round(16 * panel.sp)
+                anchors.bottom: chipBar.top
+                anchors.bottomMargin: Math.round(12 * panel.sp)
                 spacing: 0
                 orientation: ListView.Horizontal
                 clip: false
@@ -467,7 +568,7 @@ Variants {
                 header: Item { width: Math.max(0, (view.width / 2) - ((panel.itemWidth * 1.5) / 2)) }
                 footer: Item { width: Math.max(0, (view.width / 2) - ((panel.itemWidth * 1.5) / 2)) }
 
-                model: Services.Wallpapers.wallpapers
+                model: panel.carouselModel
 
                 add: Transition {
                     enabled: panel.initialFocusSet
@@ -543,19 +644,31 @@ Variants {
                             acceptedButtons: Qt.LeftButton | Qt.RightButton
                             onClicked: (mouse) => {
                                 if (mouse.button === Qt.RightButton) {
-                                    // Right-click: reset user-wallpaper in theme view
+                                    // Right-click: reset user-wallpaper in theme view.
+                                    // Clear the primary scope — that's what the override badge reflects.
                                     if (Services.Wallpapers.isThemeView &&
                                         modelData.isUserOverride === true && modelData.tag) {
-                                        Services.Wallpapers.clearUserWallpaper(modelData.tag)
+                                        if (panel.panelScreenName) {
+                                            var primaryScope = panel.panelScopes.length > 0 ? panel.panelScopes[0] : ""
+                                            Services.Wallpapers.clearUserWallpaperForScreen(
+                                                panel.panelScreenName, modelData.tag, primaryScope)
+                                        } else {
+                                            Services.Wallpapers.clearUserWallpaper(modelData.tag)
+                                        }
                                     }
                                 } else if (Services.Wallpapers.isThemeView) {
                                     // Theme view: left-click switches to this tag (no setWallpaper)
                                     view.currentIndex = index
-                                    if (modelData.tag)
-                                        Services.Wallpapers.viewTag(modelData.tag)
+                                    if (modelData.tag) panel._viewTag(modelData.tag)
                                 } else {
                                     view.currentIndex = index
-                                    Services.Wallpapers.setWallpaper(delegateRoot.filePath)
+                                    if (panel.panelScreenName) {
+                                        Services.Wallpapers.setWallpaperForScreen(
+                                            panel.panelScreenName, panel.panelSelectedTag,
+                                            delegateRoot.filePath, panel.activeEditScope)
+                                    } else {
+                                        Services.Wallpapers.setWallpaper(delegateRoot.filePath)
+                                    }
                                 }
                             }
                         }
@@ -662,8 +775,14 @@ Variants {
                                     hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: {
-                                        if (modelData.tag)
+                                        if (!modelData.tag) return
+                                        if (panel.panelScreenName) {
+                                            var primaryScope = panel.panelScopes.length > 0 ? panel.panelScopes[0] : ""
+                                            Services.Wallpapers.clearUserWallpaperForScreen(
+                                                panel.panelScreenName, modelData.tag, primaryScope)
+                                        } else {
                                             Services.Wallpapers.clearUserWallpaper(modelData.tag)
+                                        }
                                     }
                                     onContainsMouseChanged: {
                                         if (containsMouse) badgeTooltip.show()
@@ -675,6 +794,248 @@ Variants {
                                     id: badgeTooltip
                                     target: overrideBadge
                                     text: "Reset to default"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // === Scope chip bar (just above tag bar, plan §7) ===
+            // Renders the screen's active scope set + Base + add button.
+            // Click a chip to change activeEditScope. Right-click a manual
+            // scope to remove it.
+            Rectangle {
+                id: chipBar
+                anchors.bottom: tagBar.top
+                anchors.bottomMargin: Math.round(8 * panel.sp)
+                anchors.horizontalCenter: parent.horizontalCenter
+                z: 20
+
+                height: Math.round(40 * panel.sp)
+                width: chipRow.width + Math.round(20 * panel.sp)
+                radius: Math.round(12 * panel.sp)
+
+                color: Qt.rgba(Core.Theme.bgBase.r, Core.Theme.bgBase.g, Core.Theme.bgBase.b, 0.85)
+                border.color: Qt.rgba(Core.Theme.fgMuted.r, Core.Theme.fgMuted.g, Core.Theme.fgMuted.b, 0.3)
+                border.width: 1
+
+                visible: panel.panelScreenName !== ""
+
+                opacity: panel.shouldShow ? 1.0 : 0.0
+                Behavior on opacity { NumberAnimation { duration: 500; easing.type: Easing.OutCubic } }
+
+                Row {
+                    id: chipRow
+                    anchors.centerIn: parent
+                    spacing: Math.round(6 * panel.sp)
+
+                    // Screen label (e.g. "DP-2")
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: panel.panelScreenName
+                        font.family: Core.Theme.fontUI
+                        font.pixelSize: Math.round(11 * panel.sp)
+                        font.weight: Font.Bold
+                        color: Core.Theme.fgDim
+                        rightPadding: Math.round(6 * panel.sp)
+                    }
+
+                    // Active manual + auto scopes
+                    Repeater {
+                        model: panel.panelScopes
+
+                        delegate: Rectangle {
+                            required property string modelData
+                            readonly property bool isEditing: panel.activeEditScope === modelData
+                                && !panel._baseExplicitlySelected
+
+                            width: chipText.width + Math.round(22 * panel.sp)
+                            height: Math.round(28 * panel.sp)
+                            radius: Math.round(14 * panel.sp)
+                            color: isEditing
+                                ? Qt.rgba(Core.Theme.accent.r, Core.Theme.accent.g, Core.Theme.accent.b, 0.3)
+                                : (chipMa.containsMouse ? Core.Theme.surfaceContainerHigh : "transparent")
+                            border.color: isEditing ? Core.Theme.accent
+                                : Qt.rgba(Core.Theme.fgMuted.r, Core.Theme.fgMuted.g, Core.Theme.fgMuted.b, 0.4)
+                            border.width: isEditing ? 2 : 1
+                            anchors.verticalCenter: parent.verticalCenter
+
+                            Behavior on color { ColorAnimation { duration: 150 } }
+                            Behavior on border.color { ColorAnimation { duration: 150 } }
+
+                            Row {
+                                anchors.centerIn: parent
+                                spacing: Math.round(4 * panel.sp)
+
+                                Rectangle {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: Math.round(6 * panel.sp); height: width
+                                    radius: width / 2
+                                    color: isEditing ? Core.Theme.accent : Core.Theme.fgDim
+                                    opacity: isEditing ? 1.0 : 0.6
+                                }
+
+                                Text {
+                                    id: chipText
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: modelData
+                                    font.family: Core.Theme.fontUI
+                                    font.pixelSize: Math.round(11 * panel.sp)
+                                    font.weight: isEditing ? Font.Bold : Font.Normal
+                                    color: isEditing ? Core.Theme.accent : Core.Theme.fgDim
+                                }
+                            }
+
+                            MouseArea {
+                                id: chipMa
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                onClicked: (mouse) => {
+                                    if (mouse.button === Qt.RightButton) {
+                                        Services.Wallpapers.removeScopeFromScreen(
+                                            panel.panelScreenName, modelData)
+                                    } else {
+                                        panel.activeEditScope = modelData
+                                        panel._baseExplicitlySelected = false
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Base pseudo-chip (always present, unscoped baseline)
+                    Rectangle {
+                        readonly property bool isEditing: panel._baseExplicitlySelected
+                            || (panel.panelScopes.length === 0 && panel.activeEditScope === "")
+
+                        width: baseText.width + Math.round(22 * panel.sp)
+                        height: Math.round(28 * panel.sp)
+                        radius: Math.round(14 * panel.sp)
+                        color: isEditing
+                            ? Qt.rgba(Core.Theme.accent.r, Core.Theme.accent.g, Core.Theme.accent.b, 0.3)
+                            : (baseMa.containsMouse ? Core.Theme.surfaceContainerHigh : "transparent")
+                        border.color: isEditing ? Core.Theme.accent
+                            : Qt.rgba(Core.Theme.fgMuted.r, Core.Theme.fgMuted.g, Core.Theme.fgMuted.b, 0.4)
+                        border.width: isEditing ? 2 : 1
+                        anchors.verticalCenter: parent.verticalCenter
+
+                        Behavior on color { ColorAnimation { duration: 150 } }
+                        Behavior on border.color { ColorAnimation { duration: 150 } }
+
+                        Text {
+                            id: baseText
+                            anchors.centerIn: parent
+                            text: "Base"
+                            font.family: Core.Theme.fontUI
+                            font.pixelSize: Math.round(11 * panel.sp)
+                            font.weight: parent.isEditing ? Font.Bold : Font.Normal
+                            color: parent.isEditing ? Core.Theme.accent : Core.Theme.fgDim
+                        }
+
+                        MouseArea {
+                            id: baseMa
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                panel.activeEditScope = ""
+                                panel._baseExplicitlySelected = true
+                            }
+                        }
+                    }
+
+                    // Add button → opens popup listing registered-but-
+                    // unbound scopes for quick add.
+                    Rectangle {
+                        width: Math.round(28 * panel.sp); height: width
+                        radius: width / 2
+                        color: addMa.containsMouse ? Core.Theme.surfaceContainerHigh : "transparent"
+                        border.color: Qt.rgba(Core.Theme.fgMuted.r, Core.Theme.fgMuted.g, Core.Theme.fgMuted.b, 0.4)
+                        border.width: 1
+                        anchors.verticalCenter: parent.verticalCenter
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: "+"
+                            font.family: Core.Theme.fontUI
+                            font.pixelSize: Math.round(16 * panel.sp)
+                            font.weight: Font.Bold
+                            color: Core.Theme.fgDim
+                        }
+
+                        MouseArea {
+                            id: addMa
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: panel.addScopePopupOpen = !panel.addScopePopupOpen
+                        }
+                    }
+                }
+
+                // Add-scope popup: lists registered scopes not already on
+                // this screen. Click to add (LIFO — prepend).
+                Rectangle {
+                    id: addPopup
+                    anchors.top: parent.bottom
+                    anchors.topMargin: Math.round(6 * panel.sp)
+                    anchors.right: parent.right
+                    visible: panel.addScopePopupOpen && availableScopes.length > 0
+                    width: Math.round(200 * panel.sp)
+                    height: Math.min(availableScopes.length * Math.round(32 * panel.sp)
+                        + Math.round(12 * panel.sp), Math.round(200 * panel.sp))
+                    radius: Math.round(10 * panel.sp)
+                    color: Qt.rgba(Core.Theme.bgBase.r, Core.Theme.bgBase.g, Core.Theme.bgBase.b, 0.95)
+                    border.color: Qt.rgba(Core.Theme.fgMuted.r, Core.Theme.fgMuted.g, Core.Theme.fgMuted.b, 0.4)
+                    border.width: 1
+                    z: 100
+
+                    readonly property var availableScopes: {
+                        var all = Services.Wallpapers.registeredScopes || []
+                        var active = panel.panelScopes || []
+                        var activeSet = {}
+                        for (var i = 0; i < active.length; i++) activeSet[active[i]] = true
+                        return all.filter(function(s) { return !activeSet[s] })
+                    }
+
+                    ListView {
+                        anchors.fill: parent
+                        anchors.margins: Math.round(6 * panel.sp)
+                        model: addPopup.availableScopes
+                        spacing: Math.round(2 * panel.sp)
+                        clip: true
+
+                        delegate: Rectangle {
+                            required property string modelData
+                            width: ListView.view.width
+                            height: Math.round(28 * panel.sp)
+                            radius: Math.round(6 * panel.sp)
+                            color: itemMa.containsMouse ? Core.Theme.surfaceContainerHigh : "transparent"
+
+                            Text {
+                                anchors.left: parent.left
+                                anchors.leftMargin: Math.round(10 * panel.sp)
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: modelData
+                                font.family: Core.Theme.fontUI
+                                font.pixelSize: Math.round(11 * panel.sp)
+                                color: Core.Theme.fgDim
+                            }
+
+                            MouseArea {
+                                id: itemMa
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    Services.Wallpapers.addScopeToScreen(
+                                        panel.panelScreenName, modelData)
+                                    panel.addScopePopupOpen = false
+                                    panel.activeEditScope = modelData
+                                    panel._baseExplicitlySelected = false
                                 }
                             }
                         }
@@ -698,7 +1059,7 @@ Variants {
                 border.color: Qt.rgba(Core.Theme.fgMuted.r, Core.Theme.fgMuted.g, Core.Theme.fgMuted.b, 0.3)
                 border.width: 1
 
-                visible: Services.Wallpapers.tagList.length > 0
+                visible: panel.panelTagList.length > 0
 
                 opacity: panel.shouldShow ? 1.0 : 0.0
                 Behavior on opacity { NumberAnimation { duration: 500; easing.type: Easing.OutCubic } }
@@ -709,13 +1070,13 @@ Variants {
                     spacing: Math.round(6 * panel.sp)
 
                     Repeater {
-                        model: Services.Wallpapers.tagList
+                        model: panel.panelTagList
 
                         delegate: Rectangle {
                             required property string modelData
-                            readonly property bool isSelected: modelData === Services.Wallpapers.selectedTag
+                            readonly property bool isSelected: modelData === panel.panelSelectedTag
                             readonly property bool hasOverride: {
-                                var ov = Services.Wallpapers.overrides
+                                var ov = panel.panelOverrides
                                 return ov && ov[modelData] !== undefined
                             }
 
@@ -759,7 +1120,7 @@ Variants {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: Services.Wallpapers.viewTag(modelData)
+                                onClicked: panel._viewTag(modelData)
                             }
                         }
                     }
