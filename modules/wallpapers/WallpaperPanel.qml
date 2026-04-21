@@ -155,17 +155,35 @@ Variants {
         }
 
         function _focusCurrentWallpaper() {
+            // initialFocusSet gates ALL carousel animations (highlight
+            // scroll, delegate size/opacity Behaviors, add/addDisplaced
+            // Transitions). We arm it only after a non-empty settle so
+            // that the first async model population does not itself
+            // animate (noisy fade-in and a long scroll from default
+            // index to currentWallpaper). If the model is still empty
+            // here we leave the flag false — onCarouselModelChanged
+            // below will re-invoke us the moment data lands.
             var model = panel.carouselModel
-            if (!model) return
+            if (!model || model.length === 0) return
             var current = panel.panelCurrentWallpaper
             for (var i = 0; i < model.length; i++) {
                 if (model[i].path === current) {
                     view.currentIndex = i
-                    initialFocusSet = true
-                    return
+                    break
                 }
             }
-            if (model.length > 0) initialFocusSet = true
+            initialFocusSet = true
+        }
+
+        // Belt-and-suspenders for the "first open, animations never
+        // start" bug: some signal paths (shouldShow=false during focus
+        // handoff, or service caching variants) can cause the
+        // Connections handlers above to skip re-positioning when data
+        // finally arrives. Listening on the derived carouselModel
+        // directly means we catch any data transition — as long as the
+        // gate is still unset, re-settle and arm animations.
+        onCarouselModelChanged: {
+            if (panel.shouldShow && !initialFocusSet) _focusCurrentWallpaper()
         }
 
         Timer {
