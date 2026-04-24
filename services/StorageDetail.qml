@@ -163,11 +163,16 @@ Singleton {
     // `du --max-depth=1` avoids the shell glob `* .[!.]*` which on huge
     // flat $HOMEs (many dotfiles or thousands of top-level dirs) could hit
     // ARG_MAX → E2BIG and silently return nothing (review round 2, sonnet).
-    // The parser strips the $HOME prefix off each line.
+    //
+    // `head -n -1` strips du's $HOME rollup row (emitted last) BEFORE sort,
+    // so the drop is symlink-safe — matching on path equality in the parser
+    // fails if $HOME resolves differently than du's reported path (review
+    // round 3, sonnet). The parser still strips the $HOME prefix so the UI
+    // shows relative names (Documents, .cache, …).
     Process {
         id: topDirsProc
         command: ["timeout", "20", "bash", "-c",
-            "du -xb --max-depth=1 \"$HOME\" 2>/dev/null | sort -n -r | head -11"
+            "du -xb --max-depth=1 \"$HOME\" 2>/dev/null | head -n -1 | sort -n -r | head -10"
         ]
         stdout: StdioCollector {
             onStreamFinished: root._parseTopDirs(text)
@@ -358,9 +363,9 @@ Singleton {
                 var bytes = parseInt(parts[0]) || 0
                 var name = parts.slice(1).join(" ")
                 if (bytes <= 0) continue
-                // `du --max-depth=1 $HOME` emits absolute paths plus a $HOME
-                // rollup row; drop the rollup and strip the prefix so the UI
-                // still shows relative names (Documents, .cache, …).
+                // The rollup row is already stripped by `head -n -1` in the
+                // Process command. Belt-and-braces: drop anything equal to
+                // $HOME in case a different du version changes ordering.
                 if (home && (name === home || name === home + "/")) continue
                 if (homePrefix && name.indexOf(homePrefix) === 0)
                     name = name.slice(homePrefix.length)

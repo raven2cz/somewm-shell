@@ -250,30 +250,39 @@ Singleton {
     // fork-per-pid loop (review round 2, gemini: the prior loop cost ~1000
     // fork+execs every 5 s on a 1k-process desktop).
     //
-    // `BEGINFILE{ if (ERRNO) nextfile }` silently skips files that vanish
-    // mid-scan (race: pid dies between glob expansion and open) — without it
-    // gawk would fatal on the first such case. `timeout 6` still bounds any
+    // Uses `gawk` explicitly — BEGINFILE/ENDFILE/ERRNO are gawk-only; a
+    // minimal install where `awk` resolves to mawk/bwk would silently fail
+    // (review round 3, sonnet).
+    //
+    // `BEGINFILE{ if (ERRNO) { unread++; nextfile } }` silently skips files
+    // that vanish mid-scan (race: pid dies between glob expansion and open)
+    // AND counts the unreadable ones in the same pass — the prior shell
+    // `for d in /proc/[0-9]*` fallback counted a different pid set than
+    // gawk saw (review round 3, sonnet). `timeout 6` still bounds any
     // single stuck read.
     Process {
         id: procsProc
         command: ["timeout", "6", "bash", "-c",
-            "awk '" +
-                "BEGINFILE{if (ERRNO) { nextfile } " +
+            // gawk emits PSS rows on stdout and UNREAD= on stderr; we route
+            // stderr to a per-PID temp in $XDG_RUNTIME_DIR so concurrent
+            // panels don't clobber each other's counter.
+            "err=\"${XDG_RUNTIME_DIR:-/tmp}/somewm-procs-unread.$$\"; " +
+            "gawk '" +
+                "BEGINFILE{if (ERRNO) { unread++; nextfile } " +
                 "pid=FILENAME; sub(/^\\/proc\\//, \"\", pid); sub(/\\/smaps_rollup$/, \"\", pid); p=0; r=0} " +
                 "/^Pss:/{p+=$2} " +
                 "/^Rss:/{r+=$2} " +
-                "ENDFILE{if (r > 0) printf \"%d\\t%d\\t%s\\n\", p+0, r+0, pid}" +
-            "' /proc/[0-9]*/smaps_rollup 2>/dev/null " +
+                "ENDFILE{if (r > 0) printf \"%d\\t%d\\t%s\\n\", p+0, r+0, pid} " +
+                "END{printf \"UNREAD=%d\\n\", unread+0 > \"/dev/stderr\"}" +
+            "' /proc/[0-9]*/smaps_rollup 2>\"$err\" " +
             "| sort -k1,1 -nr | head -15 " +
             "| while read pss rss pid; do " +
                 "name=$(tr -d '\\0' <\"/proc/$pid/comm\" 2>/dev/null); " +
                 "[ -z \"$name\" ] && name=\"?\"; " +
                 "printf \"%s\\t%s\\t%s\\t%s\\n\" \"$pss\" \"$rss\" \"$pid\" \"$name\"; " +
             "done; " +
-            // Still track unreadable rollups for the header badge — cheap dir test.
-            "unread=0; for d in /proc/[0-9]*; do " +
-                "[ -r \"$d/smaps_rollup\" ] || unread=$((unread+1)); " +
-            "done; echo \"UNREAD=$unread\""
+            "cat \"$err\" 2>/dev/null || echo UNREAD=0; " +
+            "rm -f \"$err\""
         ]
         stdout: StdioCollector {
             onStreamFinished: root._parseProcs(text)
