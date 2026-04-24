@@ -12,3 +12,4 @@ singleton DockApps DockApps.qml
 singleton Portraits Portraits.qml
 singleton MemoryDetail MemoryDetail.qml
 singleton StorageDetail StorageDetail.qml
+singleton CpuDetail CpuDetail.qml

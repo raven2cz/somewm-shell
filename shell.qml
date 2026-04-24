@@ -13,6 +13,7 @@ import "modules/hotedges" as HotEdgesModule
 import "modules/sidebar-left" as SidebarLeftModule
 import "modules/memory-detail" as MemoryDetailModule
 import "modules/storage-detail" as StorageDetailModule
+import "modules/cpu-detail" as CpuDetailModule
 
 ShellRoot {
     // Dashboard — Caelestia-style overlay with border strip + panel
@@ -68,6 +69,10 @@ ShellRoot {
     Modules.ModuleLoader {
         moduleName: "storage-detail"
         sourceComponent: Component { StorageDetailModule.StorageDetailPanel {} }
+    }
+    Modules.ModuleLoader {
+        moduleName: "cpu-detail"
+        sourceComponent: Component { CpuDetailModule.CpuDetailPanel {} }
     }
 
     // Force NotifStore singleton instantiation at shell startup so its

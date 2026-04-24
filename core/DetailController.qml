@@ -25,6 +25,7 @@ Singleton {
     function _refresh() {
         Services.MemoryDetail.detailActive  = Core.Panels.isOpen("memory-detail")
         Services.StorageDetail.detailActive = Core.Panels.isOpen("storage-detail")
+        Services.CpuDetail.detailActive     = Core.Panels.isOpen("cpu-detail")
     }
 
     Connections {

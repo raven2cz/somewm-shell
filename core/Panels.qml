@@ -48,7 +48,7 @@ Singleton {
     readonly property var overlayPanels: [
         "dashboard", "wallpapers", "weather", "ai-chat",
         "sidebar-left",
-        "memory-detail", "storage-detail",
+        "memory-detail", "storage-detail", "cpu-detail",
     ]
     // exclusivePanels: panels that mutually close each other when one
     // opens. DELIBERATELY excludes sidebar-left — the sidebar is a
@@ -57,7 +57,7 @@ Singleton {
     // load-bearing and asserted by test-detail-panels.sh.
     readonly property var exclusivePanels: [
         "dashboard", "wallpapers", "weather", "ai-chat",
-        "memory-detail", "storage-detail",
+        "memory-detail", "storage-detail", "cpu-detail",
     ]
 
     // Track whether any overlay panel is open (for compositor scroll-guard).
