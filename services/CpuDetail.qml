@@ -238,50 +238,58 @@ Singleton {
     //
     // XDG_RUNTIME_DIR + $$ for the unreadable stderr tmp file — same
     // per-PID isolation as MemoryDetail (round-3 sonnet fix).
+    //
+    // IMPORTANT: every gawk line is joined with an explicit "\n". Earlier
+    // revision used `+ " "` concatenation, which collapsed the program to
+    // one physical line — any `#` comment then swallowed the rest of the
+    // program (awk comments run to end-of-line), killing the whole top
+    // processes section silently. Keep the `\n` terminators even when
+    // you delete the inline comments.
+    //
+    // The `$TMP` path is passed in via `-v TMP="$TMP"` so gawk gets the
+    // resolved filename as an awk variable; do NOT inline "$TMP" inside
+    // the gawk single-quoted program (bash won't expand it there and
+    // gawk would write to a literal file called "$TMP").
     Process {
         id: topProcsProc
         command: ["timeout", "4", "bash", "-c",
             "RUNDIR=\"${XDG_RUNTIME_DIR:-/tmp}\"; " +
             "TMP=\"$RUNDIR/somewm-cpu-unread.$$\"; " +
-            "gawk 'BEGIN{ " +
-            "    cmd=\"getconf CLK_TCK\"; cmd | getline tck; close(cmd); " +
-            "    if (tck+0 == 0) tck=100; " +
-            "    # First pass: record utime+stime per pid " +
-            "    unread=0; " +
-            "    while ((\"ls -1 /proc/ 2>/dev/null\" | getline pid) > 0) { " +
-            "        if (pid !~ /^[0-9]+$/) continue; " +
-            "        f=\"/proc/\" pid \"/stat\"; " +
-            "        if ((getline line < f) <= 0) { unread++; close(f); continue; } " +
-            "        close(f); " +
-            "        # comm can contain spaces + parens; use last \")\" as anchor " +
-            "        pos=index(line, \") \"); if (pos==0) continue; " +
-            "        rest=substr(line, pos+2); n=split(rest, fields, \" \"); " +
-            "        if (n < 13) continue; " +
-            "        t0[pid] = fields[12] + fields[13];  # utime+stime (1-indexed from rest) " +
-            "        # comm = between first \"(\" and last \")\" " +
-            "        a=index(line, \"(\"); " +
-            "        name[pid] = substr(line, a+1, pos-a-1); " +
-            "    } " +
-            "    close(\"ls -1 /proc/ 2>/dev/null\"); " +
-            "    system(\"sleep 1\"); " +
-            "    # Second pass: delta " +
-            "    while ((\"ls -1 /proc/ 2>/dev/null\" | getline pid) > 0) { " +
-            "        if (pid !~ /^[0-9]+$/) continue; " +
-            "        if (!(pid in t0)) continue; " +
-            "        f=\"/proc/\" pid \"/stat\"; " +
-            "        if ((getline line < f) <= 0) { close(f); continue; } " +
-            "        close(f); " +
-            "        pos=index(line, \") \"); if (pos==0) continue; " +
-            "        rest=substr(line, pos+2); n=split(rest, fields, \" \"); " +
-            "        if (n < 13) continue; " +
-            "        t1 = fields[12] + fields[13]; " +
-            "        dt = t1 - t0[pid]; if (dt <= 0) continue; " +
-            "        # delta ticks over 1 s wall → pct of ONE core " +
-            "        pct = (dt * 100.0) / tck; " +
-            "        printf \"%s\\t%s\\t%.1f\\n\", pid, name[pid], pct; " +
-            "    } " +
-            "    close(\"ls -1 /proc/ 2>/dev/null\"); " +
-            "    print unread > \"" + "$TMP" + "\"; " +
+            "gawk -v TMP=\"$TMP\" '\n" +
+            "BEGIN {\n" +
+            "    cmd=\"getconf CLK_TCK\"; cmd | getline tck; close(cmd);\n" +
+            "    if (tck+0 == 0) tck=100;\n" +
+            "    unread=0;\n" +
+            "    while ((\"ls -1 /proc/ 2>/dev/null\" | getline pid) > 0) {\n" +
+            "        if (pid !~ /^[0-9]+$/) continue;\n" +
+            "        f=\"/proc/\" pid \"/stat\";\n" +
+            "        if ((getline line < f) <= 0) { unread++; close(f); continue; }\n" +
+            "        close(f);\n" +
+            "        pos=index(line, \") \"); if (pos==0) continue;\n" +
+            "        rest=substr(line, pos+2); n=split(rest, fields, \" \");\n" +
+            "        if (n < 13) continue;\n" +
+            "        t0[pid] = fields[12] + fields[13];\n" +
+            "        a=index(line, \"(\");\n" +
+            "        name[pid] = substr(line, a+1, pos-a-1);\n" +
+            "    }\n" +
+            "    close(\"ls -1 /proc/ 2>/dev/null\");\n" +
+            "    system(\"sleep 1\");\n" +
+            "    while ((\"ls -1 /proc/ 2>/dev/null\" | getline pid) > 0) {\n" +
+            "        if (pid !~ /^[0-9]+$/) continue;\n" +
+            "        if (!(pid in t0)) continue;\n" +
+            "        f=\"/proc/\" pid \"/stat\";\n" +
+            "        if ((getline line < f) <= 0) { close(f); continue; }\n" +
+            "        close(f);\n" +
+            "        pos=index(line, \") \"); if (pos==0) continue;\n" +
+            "        rest=substr(line, pos+2); n=split(rest, fields, \" \");\n" +
+            "        if (n < 13) continue;\n" +
+            "        t1 = fields[12] + fields[13];\n" +
+            "        dt = t1 - t0[pid]; if (dt <= 0) continue;\n" +
+            "        pct = (dt * 100.0) / tck;\n" +
+            "        printf \"%s\\t%s\\t%.1f\\n\", pid, name[pid], pct;\n" +
+            "    }\n" +
+            "    close(\"ls -1 /proc/ 2>/dev/null\");\n" +
+            "    print unread > TMP;\n" +
             "}' | sort -k3 -n -r | head -15; " +
             "cat \"$TMP\" 2>/dev/null | head -1 | awk '{print \"__unread__=\"$1}'; " +
             "rm -f \"$TMP\" 2>/dev/null"
