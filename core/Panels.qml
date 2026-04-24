@@ -109,6 +109,12 @@ Singleton {
 
     // Toggle a panel and pin it to a specific screen (by name or index string).
     // If the panel is being closed, the pin is cleared.
+    //
+    // Ordering is load-bearing: `_setPin` writes to the live `panelPin` first,
+    // then `toggle()` snapshots `panelPin` via `Object.assign({}, panelPin)`
+    // so the new pin survives the mutual-exclusion rewrite. Do not swap the
+    // two calls or move `panelPin = pins` earlier inside `toggle()` — the new
+    // pin would be silently dropped (review round 2, sonnet).
     function toggleOnScreen(name, screenName) {
         var willOpen = !openPanels[name]
         if (willOpen) _setPin(name, screenName)

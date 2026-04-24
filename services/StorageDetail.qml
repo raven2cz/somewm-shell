@@ -158,36 +158,55 @@ Singleton {
         }
     }
 
-    // Top-level $HOME dirs by size (depth-1), top 10
+    // Top-level $HOME dirs by size (depth-1), top 10.
+    //
+    // `du --max-depth=1` avoids the shell glob `* .[!.]*` which on huge
+    // flat $HOMEs (many dotfiles or thousands of top-level dirs) could hit
+    // ARG_MAX → E2BIG and silently return nothing (review round 2, sonnet).
+    // The parser strips the $HOME prefix off each line.
     Process {
         id: topDirsProc
         command: ["timeout", "20", "bash", "-c",
-            "cd \"$HOME\" 2>/dev/null || exit 0; " +
-            "du -sxb -- * .[!.]* 2>/dev/null | sort -n -r | head -10"
+            "du -xb --max-depth=1 \"$HOME\" 2>/dev/null | sort -n -r | head -11"
         ]
         stdout: StdioCollector {
             onStreamFinished: root._parseTopDirs(text)
         }
     }
 
-    // paccache dry-run preview: how many pkgs, how many bytes would be removed
+    // paccache dry-run preview: how many pkgs, how many bytes would be removed.
+    //
+    // `command` is intentionally empty — paccacheDryRun() always rebuilds it
+    // so `keep` is clamped and `LC_ALL=C` is forced. Declaring a static
+    // command here would be a latent trap if something ever flipped `running`
+    // before the function ran (review round 2, sonnet).
     Process {
         id: paccacheDryProc
         property int keep: 2
-        command: ["bash", "-c", "paccache -dk" + keep + " --nocolor 2>&1"]
+        command: []
         stdout: StdioCollector {
             onStreamFinished: root._parsePaccacheDry(text)
         }
     }
 
-    // paccache real run (via pkexec)
+    // paccache real run (via pkexec).
+    //
+    // Read exitCode on `onExited` rather than inside `StdioCollector.
+    // onStreamFinished` — stdout may close (EOF) a scheduler tick before the
+    // process is fully reaped, so the collector handler can see an
+    // undefined/stale exit code (review round 2, gemini).
     Process {
         id: paccacheRunProc
         property int keep: 2
+        property string _stdout: ""
         stdout: StdioCollector {
-            onStreamFinished: root._parsePaccacheRun(text, paccacheRunProc.exitCode)
+            onStreamFinished: paccacheRunProc._stdout = text
         }
         stderr: StdioCollector { }
+        onExited: function(code, status) {
+            root._parsePaccacheRun(paccacheRunProc._stdout, code)
+            paccacheRunProc._stdout = ""
+        }
     }
 
     // =============================================================
@@ -327,6 +346,8 @@ Singleton {
 
     function _parseTopDirs(text) {
         try {
+            var home = Quickshell.env("HOME") || ""
+            var homePrefix = home ? (home + "/") : ""
             var lines = (text || "").split("\n")
             var out = []
             for (var i = 0; i < lines.length; i++) {
@@ -337,6 +358,12 @@ Singleton {
                 var bytes = parseInt(parts[0]) || 0
                 var name = parts.slice(1).join(" ")
                 if (bytes <= 0) continue
+                // `du --max-depth=1 $HOME` emits absolute paths plus a $HOME
+                // rollup row; drop the rollup and strip the prefix so the UI
+                // still shows relative names (Documents, .cache, …).
+                if (home && (name === home || name === home + "/")) continue
+                if (homePrefix && name.indexOf(homePrefix) === 0)
+                    name = name.slice(homePrefix.length)
                 out.push({ path: name, bytes: bytes })
             }
             out.sort(function(a, b) { return b.bytes - a.bytes })
@@ -358,8 +385,15 @@ Singleton {
             var b = body.match(/disk space saved:\s*([0-9.]+)\s*(KiB|MiB|GiB|TiB|B)/i)
             var bytes = 0
             if (b) {
+                // Normalise "gib" etc to CamelCase before dictionary lookup;
+                // the /i flag would otherwise let "Gib" or "GIB" fall through
+                // to the `|| 1` fallback and under-report by ~9 orders of
+                // magnitude (review round 2, gemini).
                 var unit = { B: 1, KiB: 1024, MiB: 1048576, GiB: 1073741824, TiB: 1099511627776 }
-                bytes = Math.round((parseFloat(b[1]) || 0) * (unit[b[2]] || 1))
+                var u = (b[2] || "").toUpperCase()
+                var canonical = { B: "B", KIB: "KiB", MIB: "MiB",
+                                  GIB: "GiB", TIB: "TiB" }
+                bytes = Math.round((parseFloat(b[1]) || 0) * (unit[canonical[u]] || 1))
             }
             root.paccachePreview = body.trim()
             root.paccachePreviewCount = count

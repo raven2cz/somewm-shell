@@ -246,24 +246,33 @@ Singleton {
         }
     }
 
-    // PSS scan — single awk per pid, timeout-guarded (outer timeout caps the
-    // whole /proc walk; inner `timeout 1` bounds any single awk invocation so
-    // a stuck /proc entry cannot wedge the scan).
+    // PSS scan — one gawk pass over all /proc/*/smaps_rollup instead of a
+    // fork-per-pid loop (review round 2, gemini: the prior loop cost ~1000
+    // fork+execs every 5 s on a 1k-process desktop).
+    //
+    // `BEGINFILE{ if (ERRNO) nextfile }` silently skips files that vanish
+    // mid-scan (race: pid dies between glob expansion and open) — without it
+    // gawk would fatal on the first such case. `timeout 6` still bounds any
+    // single stuck read.
     Process {
         id: procsProc
         command: ["timeout", "6", "bash", "-c",
-            "unread=0; " +
-            "for d in /proc/[0-9]*; do " +
-                "pid=${d##*/}; " +
-                "if [ ! -r \"$d/smaps_rollup\" ]; then unread=$((unread+1)); continue; fi; " +
-                "timeout 1 awk 'BEGIN{p=0;r=0} " +
-                    "/^Pss:/{p+=$2} /^Rss:/{r+=$2} " +
-                    "END{printf \"%d\\t%d\\t'\"$pid\"'\\n\", p+0, r+0}' " +
-                    "\"$d/smaps_rollup\" 2>/dev/null; " +
-            "done | sort -k1,1 -nr | head -15 | while read pss rss pid; do " +
+            "awk '" +
+                "BEGINFILE{if (ERRNO) { nextfile } " +
+                "pid=FILENAME; sub(/^\\/proc\\//, \"\", pid); sub(/\\/smaps_rollup$/, \"\", pid); p=0; r=0} " +
+                "/^Pss:/{p+=$2} " +
+                "/^Rss:/{r+=$2} " +
+                "ENDFILE{if (r > 0) printf \"%d\\t%d\\t%s\\n\", p+0, r+0, pid}" +
+            "' /proc/[0-9]*/smaps_rollup 2>/dev/null " +
+            "| sort -k1,1 -nr | head -15 " +
+            "| while read pss rss pid; do " +
                 "name=$(tr -d '\\0' <\"/proc/$pid/comm\" 2>/dev/null); " +
                 "[ -z \"$name\" ] && name=\"?\"; " +
                 "printf \"%s\\t%s\\t%s\\t%s\\n\" \"$pss\" \"$rss\" \"$pid\" \"$name\"; " +
+            "done; " +
+            // Still track unreadable rollups for the header badge — cheap dir test.
+            "unread=0; for d in /proc/[0-9]*; do " +
+                "[ -r \"$d/smaps_rollup\" ] || unread=$((unread+1)); " +
             "done; echo \"UNREAD=$unread\""
         ]
         stdout: StdioCollector {
@@ -344,16 +353,25 @@ Singleton {
                 if (kv.length === 2) m[kv[0]] = parseInt(kv[1]) || 0
             }
             // Schema-drift detector — warn once when the eval output stops
-            // carrying a field we expect. This catches C-API field renames
-            // without requiring a live test.
-            var missing = []
-            for (var k = 0; k < _expectedStatKeys.length; k++) {
-                if (!(_expectedStatKeys[k] in m)) missing.push(_expectedStatKeys[k])
-            }
-            if (missing.length > 0) {
+            // carrying a field we expect. Catches C-API field renames without
+            // requiring a live test.
+            //
+            // Bail out if parsing produced zero tokens: that means the IPC
+            // call timed out / returned empty, NOT that the schema drifted.
+            // Without this guard we'd spam the log once per compositor hiccup
+            // (review round 2, sonnet).
+            var gotAnyKey = false
+            for (var mk in m) { gotAnyKey = true; break }
+            if (gotAnyKey) {
+                var missing = []
+                for (var k = 0; k < _expectedStatKeys.length; k++) {
+                    if (!(_expectedStatKeys[k] in m)) missing.push(_expectedStatKeys[k])
+                }
                 var sig = missing.join(",")
                 if (sig !== _lastSchemaWarning) {
-                    console.warn("MemoryDetail: schema drift — missing keys: " + sig)
+                    if (missing.length > 0) {
+                        console.warn("MemoryDetail: schema drift — missing keys: " + sig)
+                    }
                     root._lastSchemaWarning = sig
                 }
             }
