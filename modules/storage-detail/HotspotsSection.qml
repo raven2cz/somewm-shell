@@ -126,7 +126,7 @@ Item {
         spacing: Core.Theme.spacing.sm
 
         Components.SectionHeader {
-            title: "Arch system hotspots"
+            title: "Hotspots"
             accentColor: Core.Theme.widgetDisk
             Layout.fillWidth: true
         }

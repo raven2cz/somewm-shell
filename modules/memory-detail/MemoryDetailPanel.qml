@@ -38,8 +38,15 @@ Variants {
         margins.right: 20
 
         implicitWidth: Math.round(580 * Core.Theme.dpiScale)
-        implicitHeight: Math.min(Math.round(760 * Core.Theme.dpiScale),
-                                 modelData && modelData.height ? modelData.height - 120 : 760)
+        // Grow vertically on 4K/portrait screens: (modelData.height - 120)
+        // gives a screen-edge safety margin, capped at 1400 px so a 3840 px
+        // portrait HP display doesn't turn the panel into a column the user
+        // has to crane their neck to read. On 1080p/1440p the
+        // (height - 120) term rules; on 4K the 760 ceiling is lifted.
+        implicitHeight: Math.min(
+            Math.round(1400 * Core.Theme.dpiScale),
+            modelData && modelData.height ? modelData.height - 120
+                                          : Math.round(760 * Core.Theme.dpiScale))
 
         mask: Region { item: card }
 

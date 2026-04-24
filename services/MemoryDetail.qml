@@ -77,11 +77,29 @@ Singleton {
     property var lastSomewm: null
     property var lastProcs: null
 
-    // --- trend ring (values are 0..1 normalised) ---
+    // --- trend ring (values are 0..1 normalised for the sparkline) ---
     property var trendRss: []
     property var trendLua: []
     property var trendWallpaper: []
     property int trendMaxPoints: 60
+
+    // --- absolute-scale trend stats ---
+    //
+    // The sparkline ring is 0..1 normalised; by itself it can't answer
+    // "what's the peak?" or "how much did this grow since I opened the
+    // panel?". These companion scalars carry the raw bytes/KB so
+    // TrendSection can render proper labels + delta since open without
+    // re-normalising. Reset to 0 in onDetailActiveChanged on close; the
+    // first _pushTrend call after re-open seeds init = current, so deltas
+    // are always anchored to "since this panel open" (plan §4 Fix A/C).
+    property int trendRssPeakKB: 0
+    property int trendRssInitKB: 0
+    property double trendLuaMaxBytes: 0
+    property double trendLuaMinBytes: 0
+    property double trendLuaInitBytes: 0
+    property double trendWpMaxBytes: 0
+    property double trendWpMinBytes: 0
+    property double trendWpInitBytes: 0
 
     // --- parser helper: strip "OK\n" prefix from somewm-client eval output ---
     function _ipcValue(raw) {
@@ -133,15 +151,47 @@ Singleton {
         onTriggered: root._pushTrend()
     }
 
-    // Resolve somewm pid once on activation (re-resolves if the stored pid dies)
+    // Lifecycle: force-stop in-flight Process instances on close so a slow
+    // probe (e.g. PSS scan over hundreds of /proc entries) doesn't keep
+    // running for seconds after the panel is gone.
+    //
+    // Contract: EVERY Process in this file wraps its command in `timeout N`
+    // at argv[0]. Setting `Process.running = false` terminates the immediate
+    // child (the `timeout` wrapper); POSIX `timeout` then propagates SIGTERM
+    // to its child (gawk/bash/etc.). This is the only reason the stop is
+    // safe — per sonnet review round 2 plan, a raw bash/cmd without timeout
+    // wrapper could leave orphans. Enforced by test-detail-panels.sh.
+    //
+    // Also: reset `*Loaded` flags so the next open starts clean rather than
+    // flashing stale numbers from minutes ago.
     onDetailActiveChanged: {
         if (detailActive) {
             pidProc.running = true
-        } else {
-            root.trendRss = []
-            root.trendLua = []
-            root.trendWallpaper = []
+            return
         }
+        if (pidProc.running)         pidProc.running = false
+        if (pidFallbackProc.running) pidFallbackProc.running = false
+        if (memInfoProc.running)     memInfoProc.running = false
+        if (somewmProc.running)      somewmProc.running = false
+        if (somewmRssProc.running)   somewmRssProc.running = false
+        if (procsProc.running)       procsProc.running = false
+        root.trendRss = []
+        root.trendLua = []
+        root.trendWallpaper = []
+        root.trendRssPeakKB = 0
+        root.trendRssInitKB = 0
+        root.trendLuaMaxBytes = 0
+        root.trendLuaMinBytes = 0
+        root.trendLuaInitBytes = 0
+        root.trendWpMaxBytes = 0
+        root.trendWpMinBytes = 0
+        root.trendWpInitBytes = 0
+        root.somewmLoaded = false
+        root.procsLoaded = false
+        // Sections key off `memTotalKB > 0` to gate the loading skeleton —
+        // resetting it forces "Loading /proc/meminfo…" on next open, instead
+        // of flashing stale numbers from an earlier session.
+        root.memTotalKB = 0
     }
 
     // =============================================================
@@ -209,9 +259,15 @@ Singleton {
     }
 
     // /proc/meminfo
+    //
+    // /proc/meminfo is a kernel-backed virtual file and can't block in
+    // practice, but we still wrap in `timeout 2` so the lifecycle invariant
+    // holds uniformly across every Process in this file: argv[0] == timeout,
+    // so `running = false` on panel close reliably propagates SIGTERM to
+    // the child (see onDetailActiveChanged contract block above).
     Process {
         id: memInfoProc
-        command: ["cat", "/proc/meminfo"]
+        command: ["timeout", "2", "cat", "/proc/meminfo"]
         stdout: StdioCollector {
             onStreamFinished: root._parseMemInfo(text)
         }
@@ -474,6 +530,30 @@ Singleton {
         pts.push(wpFrac)
         if (pts.length > trendMaxPoints) pts.shift()
         trendWallpaper = pts
+
+        // Absolute-scale stats for TrendSection (plan §4). First sample
+        // after open seeds init; subsequent samples extend peak/min so
+        // "delta since open" and "peak (last 5 min)" are always anchored
+        // to this panel session.
+        if (root.trendRssInitKB === 0 && root.somewmRssKB > 0)
+            root.trendRssInitKB = root.somewmRssKB
+        if (root.somewmRssKB > root.trendRssPeakKB)
+            root.trendRssPeakKB = root.somewmRssKB
+
+        if (root.luaBytes > 0) {
+            if (root.trendLuaInitBytes === 0) root.trendLuaInitBytes = root.luaBytes
+            if (root.trendLuaMinBytes === 0 || root.luaBytes < root.trendLuaMinBytes)
+                root.trendLuaMinBytes = root.luaBytes
+            if (root.luaBytes > root.trendLuaMaxBytes)
+                root.trendLuaMaxBytes = root.luaBytes
+        }
+        if (root.wallpaperEstBytes > 0) {
+            if (root.trendWpInitBytes === 0) root.trendWpInitBytes = root.wallpaperEstBytes
+            if (root.trendWpMinBytes === 0 || root.wallpaperEstBytes < root.trendWpMinBytes)
+                root.trendWpMinBytes = root.wallpaperEstBytes
+            if (root.wallpaperEstBytes > root.trendWpMaxBytes)
+                root.trendWpMaxBytes = root.wallpaperEstBytes
+        }
     }
 
     // =============================================================

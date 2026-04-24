@@ -35,6 +35,14 @@ Singleton {
     property bool topDirsLoaded: false
     property bool topDirsRunning: false
 
+    // True $HOME size in bytes (from an independent `du --max-depth=0` run
+    // — see homeTotalProc). Used as the denominator for the "% of $HOME"
+    // column in TopDirsSection. Without this denominator, showing a
+    // percentage against the sum of the top 10 dirs is misleading (plan §5
+    // / gemini review round 1). 0 means "not yet loaded" — UI renders `—`.
+    property double homeTotalBytes: 0
+    property bool homeTotalLoaded: false
+
     // --- paccache state ---
     property bool paccacheAvailable: false
     property bool pkexecAvailable: false
@@ -64,13 +72,32 @@ Singleton {
         onTriggered: if (!mountsProc.running) mountsProc.running = true
     }
 
+    // Lifecycle: when detailActive flips true we kick off one-shots; when it
+    // flips false we force-stop every Process and clear per-session state so
+    // the panel can't keep burning CPU/IO after the user closed it.
+    //
+    // Safe to set `running = false` on an idle Process (no-op). For a live
+    // one, Quickshell sends SIGTERM to the child. Every command below is
+    // wrapped in `timeout N …` whose argv[0] IS the child — POSIX timeout
+    // propagates SIGTERM to its child (du/findmnt/journalctl/paccache), so
+    // there are no zombies left behind. See plans/qs-detail-panels-polish-plus-cpu.md §7.
     onDetailActiveChanged: {
         if (detailActive) {
-            // Initial one-shots: tools, hotspots, top dirs
             if (!toolsProc.running) toolsProc.running = true
             if (!hotspotsProc.running) hotspotsProc.running = true
             _runTopDirs()
+            return
         }
+        if (mountsProc.running)      mountsProc.running = false
+        if (toolsProc.running)       toolsProc.running = false
+        if (hotspotsProc.running)    hotspotsProc.running = false
+        if (topDirsProc.running)     topDirsProc.running = false
+        if (homeTotalProc.running)   homeTotalProc.running = false
+        if (paccacheDryProc.running) paccacheDryProc.running = false
+        // paccacheRunProc is left alone: it's user-initiated via pkexec and
+        // killing it mid-flight would leave the pacman cache half-pruned.
+        root.topDirsRunning = false
+        root.paccacheBusy = false
     }
 
     function refresh() {
@@ -84,6 +111,9 @@ Singleton {
         if (topDirsRunning) return
         topDirsRunning = true
         topDirsProc.running = true
+        // Kick off the $HOME total in parallel — independent probe, same
+        // interval, used as the denominator for the "% of $HOME" column.
+        if (!homeTotalProc.running) homeTotalProc.running = true
     }
 
     // =============================================================
@@ -176,6 +206,23 @@ Singleton {
         ]
         stdout: StdioCollector {
             onStreamFinished: root._parseTopDirs(text)
+        }
+    }
+
+    // True $HOME total (rollup, depth 0) — denominator for the "% of
+    // $HOME" column in TopDirsSection. Runs in parallel with topDirsProc
+    // at the same 30 s interval; on SSD this is 0.5–5 s. Until it lands,
+    // the UI renders `—` rather than a misleading "% of top-10 sum".
+    //
+    // Output: a single line, e.g. "123456789\t/home/box". awk prints
+    // $1 only (bytes field) so the stdin to QML is just the number.
+    Process {
+        id: homeTotalProc
+        command: ["timeout", "20", "bash", "-c",
+            "du -xb --max-depth=0 \"$HOME\" 2>/dev/null | awk '{print $1}'"
+        ]
+        stdout: StdioCollector {
+            onStreamFinished: root._parseHomeTotal(text)
         }
     }
 
@@ -378,6 +425,18 @@ Singleton {
             console.error("StorageDetail._parseTopDirs:", e)
         } finally {
             root.topDirsRunning = false
+        }
+    }
+
+    function _parseHomeTotal(text) {
+        try {
+            var n = parseInt((text || "").trim())
+            if (n > 0) {
+                root.homeTotalBytes = n
+                root.homeTotalLoaded = true
+            }
+        } catch (e) {
+            console.error("StorageDetail._parseHomeTotal:", e)
         }
     }
 

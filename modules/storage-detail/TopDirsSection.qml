@@ -20,6 +20,10 @@ Item {
 
     readonly property var dirs: Services.StorageDetail.topDirs
     readonly property int maxBytes: dirs.length > 0 ? dirs[0].bytes : 1
+    // True $HOME total — denominator for the % column. 0 means "not yet
+    // loaded" (homeTotalProc running in parallel with topDirsProc); UI
+    // renders `—` in that case rather than a wrong-denominator number.
+    readonly property double homeTotal: Services.StorageDetail.homeTotalBytes
 
     ColumnLayout {
         id: content
@@ -28,7 +32,7 @@ Item {
         spacing: Core.Theme.spacing.sm
 
         Components.SectionHeader {
-            title: "Biggest top-level directories under $HOME"
+            title: "Top $HOME dirs"
             accentColor: Core.Theme.widgetDisk
             Layout.fillWidth: true
         }
@@ -51,6 +55,40 @@ Item {
             font.pixelSize: Core.Theme.fontSize.sm
             color: Core.Theme.fgMuted
             Layout.fillWidth: true
+        }
+
+        // Column header — anchors the columns below and gives the "%"
+        // column an explicit denominator ("% of $HOME"). Without the
+        // header the percent column would be ambiguous — could be read
+        // as % of top-10 sum or % of $HOME. The spacer widths mirror
+        // the delegate below so the header lines up.
+        RowLayout {
+            Layout.fillWidth: true
+            visible: Services.StorageDetail.topDirsLoaded && root.dirs.length > 0
+            spacing: Core.Theme.spacing.sm
+
+            Item { Layout.preferredWidth: Math.round(22 * Core.Theme.dpiScale) }
+            Components.StyledText {
+                Layout.preferredWidth: Math.round(170 * Core.Theme.dpiScale)
+                text: "dir"
+                font.pixelSize: Core.Theme.fontSize.xs
+                color: Core.Theme.fgDim
+            }
+            Item { Layout.fillWidth: true }
+            Components.StyledText {
+                Layout.preferredWidth: Math.round(84 * Core.Theme.dpiScale)
+                text: "size"
+                font.pixelSize: Core.Theme.fontSize.xs
+                color: Core.Theme.fgDim
+                horizontalAlignment: Text.AlignRight
+            }
+            Components.StyledText {
+                Layout.preferredWidth: Math.round(42 * Core.Theme.dpiScale)
+                text: "% $HOME"
+                font.pixelSize: Core.Theme.fontSize.xs
+                color: Core.Theme.fgDim
+                horizontalAlignment: Text.AlignRight
+            }
         }
 
         Repeater {
@@ -88,6 +126,7 @@ Item {
                     color: Qt.rgba(1, 1, 1, 0.04)
 
                     Rectangle {
+                        id: fillBar
                         anchors.left: parent.left
                         anchors.verticalCenter: parent.verticalCenter
                         width: {
@@ -99,7 +138,14 @@ Item {
                         color: Qt.rgba(Core.Theme.widgetDisk.r,
                                        Core.Theme.widgetDisk.g,
                                        Core.Theme.widgetDisk.b, 0.65)
+                        // _ready gate — same reasoning as TopProcessesSection
+                        // (plan §3): prevents from-zero sweep on each 30 s
+                        // array-swap refresh while leaving reflow animation
+                        // intact for any future stable-model migration.
+                        property bool _ready: false
+                        Component.onCompleted: _ready = true
                         Behavior on width {
+                            enabled: fillBar._ready
                             NumberAnimation {
                                 duration: Core.Anims.duration.smooth
                                 easing.type: Core.Anims.ease.decel
@@ -108,13 +154,28 @@ Item {
                     }
                 }
 
-                // value
+                // value (absolute GiB/MiB)
                 Components.StyledText {
-                    Layout.preferredWidth: Math.round(90 * Core.Theme.dpiScale)
+                    Layout.preferredWidth: Math.round(84 * Core.Theme.dpiScale)
                     text: root._fmt(modelData.bytes)
                     font.family: Core.Theme.fontMono
                     font.pixelSize: Core.Theme.fontSize.sm
                     color: Core.Theme.fgMain
+                    horizontalAlignment: Text.AlignRight
+                }
+
+                // share of $HOME (independent of top-10 sum — honest
+                // denominator, see services/StorageDetail.qml homeTotalProc).
+                // Until that probe lands we show `—` rather than a wrong
+                // number. Muted colour keeps the bar the primary visual cue.
+                Components.StyledText {
+                    Layout.preferredWidth: Math.round(42 * Core.Theme.dpiScale)
+                    text: root.homeTotal > 0
+                        ? Math.round(100 * modelData.bytes / root.homeTotal) + "%"
+                        : "—"
+                    font.family: Core.Theme.fontMono
+                    font.pixelSize: Core.Theme.fontSize.sm
+                    color: Core.Theme.fgMuted
                     horizontalAlignment: Text.AlignRight
                 }
             }

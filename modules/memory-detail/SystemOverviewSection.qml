@@ -98,49 +98,141 @@ Item {
             }
         }
 
-        // --- stacked bar ---
-        Item {
+        // --- legend (used / reclaimable / free) ---
+        //
+        // Without this the dark-pink / light-pink bar is a colour puzzle.
+        // Lives above the bar so the eye picks up the meaning before it
+        // hits the visual.
+        RowLayout {
             Layout.fillWidth: true
-            Layout.preferredHeight: Math.round(18 * Core.Theme.dpiScale)
             visible: root.loaded
+            spacing: Core.Theme.spacing.md
 
-            readonly property real totalKB:  Math.max(1, Services.MemoryDetail.memTotalKB)
-            readonly property real usedFrac: Services.MemoryDetail.usedKB / totalKB
-            readonly property real reclaimFrac: Services.MemoryDetail.reclaimableKB / totalKB
-
-            Rectangle {
-                anchors.fill: parent
-                radius: height / 2
-                color: Qt.rgba(1, 1, 1, 0.04)
-            }
-
-            // Used (opaque accent)
-            Rectangle {
-                height: parent.height
-                width: Math.max(2, parent.width * parent.usedFrac)
-                radius: height / 2
-                color: Core.Theme.widgetMemory
-                Behavior on width {
-                    NumberAnimation {
-                        duration: Core.Anims.duration.smooth
-                        easing.type: Core.Anims.ease.decel
+            Repeater {
+                model: [
+                    { label: "used",        alpha: 1.00 },
+                    { label: "reclaimable", alpha: 0.30 },
+                    { label: "free",        alpha: 0.00 }   // free = track colour
+                ]
+                delegate: RowLayout {
+                    spacing: Core.Theme.spacing.xs
+                    Rectangle {
+                        implicitWidth: Math.round(10 * Core.Theme.dpiScale)
+                        implicitHeight: Math.round(10 * Core.Theme.dpiScale)
+                        radius: 2
+                        color: modelData.alpha > 0
+                             ? Qt.rgba(Core.Theme.widgetMemory.r,
+                                       Core.Theme.widgetMemory.g,
+                                       Core.Theme.widgetMemory.b,
+                                       modelData.alpha)
+                             : Qt.rgba(1, 1, 1, 0.10)
+                        border.color: Qt.rgba(1, 1, 1, 0.12)
+                        border.width: 1
+                    }
+                    Components.StyledText {
+                        text: modelData.label
+                        font.pixelSize: Core.Theme.fontSize.xs
+                        color: Core.Theme.fgMuted
                     }
                 }
             }
-            // Reclaimable (semi-transparent accent)
+            Item { Layout.fillWidth: true }   // trailing spacer
+        }
+
+        // --- stacked bar (used / reclaimable / free) ---
+        //
+        // Pill shape detail: the TRACK owns the rounded envelope via
+        // `radius: height/2` + `clip: true` — clip masks reclaimBar's right
+        // edge from bleeding past the cap. usedBar keeps its OWN
+        // `radius: height/2` because clip doesn't mask the LEFT side (both
+        // usedBar and the track start at x=0, so there's nothing to clip
+        // against). reclaimBar is flat (`radius: 0`) so the seam between
+        // used/reclaimable is a straight vertical edge, not two rounded
+        // caps colliding. All x/width go through Math.round() to avoid
+        // fractional-DPI hairline bleed (gemini review round 1 §2).
+        Item {
+            id: barWrapper
+            Layout.fillWidth: true
+            Layout.preferredHeight: Math.round(22 * Core.Theme.dpiScale)
+            visible: root.loaded
+
+            readonly property real totalKB:    Math.max(1, Services.MemoryDetail.memTotalKB)
+            readonly property real usedFrac:   Services.MemoryDetail.usedKB / totalKB
+            readonly property real reclaimFrac: Services.MemoryDetail.reclaimableKB / totalKB
+
             Rectangle {
-                x: parent.width * parent.usedFrac
-                height: parent.height
-                width: parent.width * parent.reclaimFrac
-                radius: 0
-                color: Qt.rgba(Core.Theme.widgetMemory.r,
-                               Core.Theme.widgetMemory.g,
-                               Core.Theme.widgetMemory.b, 0.30)
-                Behavior on width {
-                    NumberAnimation {
-                        duration: Core.Anims.duration.smooth
-                        easing.type: Core.Anims.ease.decel
+                id: barTrack
+                anchors.fill: parent
+                radius: height / 2
+                color: Qt.rgba(1, 1, 1, 0.08)
+                clip: true   // masks reclaimBar's right edge past the cap
+
+                Rectangle {
+                    id: usedBar
+                    anchors.left: parent.left
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    width: Math.max(2, Math.round(parent.width * barWrapper.usedFrac))
+                    radius: height / 2
+                    color: Core.Theme.widgetMemory
+                    Behavior on width {
+                        NumberAnimation {
+                            duration: Core.Anims.duration.smooth
+                            easing.type: Core.Anims.ease.decel
+                        }
                     }
+                }
+                Rectangle {
+                    id: reclaimBar
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    x: Math.round(parent.width * barWrapper.usedFrac)
+                    width: Math.round(parent.width * barWrapper.reclaimFrac)
+                    radius: 0
+                    color: Qt.rgba(Core.Theme.widgetMemory.r,
+                                   Core.Theme.widgetMemory.g,
+                                   Core.Theme.widgetMemory.b, 0.30)
+                    Behavior on x {
+                        NumberAnimation {
+                            duration: Core.Anims.duration.smooth
+                            easing.type: Core.Anims.ease.decel
+                        }
+                    }
+                    Behavior on width {
+                        NumberAnimation {
+                            duration: Core.Anims.duration.smooth
+                            easing.type: Core.Anims.ease.decel
+                        }
+                    }
+                }
+            }
+
+            // Centred USED percent, layered above both bars. Outlined for
+            // contrast whether the text lands on pink (used) or on the
+            // dark track (free) — the label stays in place, the bars slide
+            // underneath it.
+            Components.StyledText {
+                anchors.centerIn: parent
+                text: Math.round(100 * barWrapper.usedFrac) + "%"
+                font.family: Core.Theme.fontMono
+                font.pixelSize: Core.Theme.fontSize.sm
+                font.bold: true
+                color: "#ffffff"
+                style: Text.Outline
+                styleColor: Qt.rgba(0, 0, 0, 0.55)
+            }
+
+            // Accessibility: hover reveals the exact GiB breakdown so
+            // users curious about the colour mapping get the numbers too.
+            HoverHandler { id: barHover }
+            Components.Tooltip {
+                target: barWrapper
+                visible: barHover.hovered
+                text: {
+                    var used  = root._fmtGiB(Services.MemoryDetail.usedKB)
+                    var recl  = root._fmtGiB(Services.MemoryDetail.reclaimableKB)
+                    var free  = root._fmtGiB(Services.MemoryDetail.memAvailKB)
+                    return used + " used · " + recl + " reclaimable · " + free + " free"
                 }
             }
         }

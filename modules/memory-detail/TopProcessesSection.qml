@@ -79,6 +79,7 @@ Item {
                     color: Qt.rgba(1, 1, 1, 0.04)
 
                     Rectangle {
+                        id: fillBar
                         anchors.left: parent.left
                         anchors.verticalCenter: parent.verticalCenter
                         width: {
@@ -92,7 +93,28 @@ Item {
                              : Qt.rgba(Core.Theme.widgetMemory.r,
                                        Core.Theme.widgetMemory.g,
                                        Core.Theme.widgetMemory.b, 0.55)
+
+                        // _ready gate: the Repeater re-creates every
+                        // delegate on each 5 s array-swap refresh, so
+                        // width starts at 0 and the Behavior would sweep
+                        // to target each tick ("all processes just freed
+                        // memory" — misread as a memory event).
+                        //
+                        // Flipping _ready in Component.onCompleted wakes
+                        // the Behavior AFTER the initial binding already
+                        // resolved to the final width — so the opening
+                        // frame draws at target. The binding inputs
+                        // (modelData.pssKB, root.maxPss) don't re-fire
+                        // after construction in the current model
+                        // (fresh delegate per swap), so nothing animates
+                        // visibly. If we later migrate to stable
+                        // delegates (ListModel diff), this same flag
+                        // still lets width reflow animate smoothly.
+                        // Do NOT "simplify" this away — see plan §3.
+                        property bool _ready: false
+                        Component.onCompleted: _ready = true
                         Behavior on width {
+                            enabled: fillBar._ready
                             NumberAnimation {
                                 duration: Core.Anims.duration.smooth
                                 easing.type: Core.Anims.ease.decel

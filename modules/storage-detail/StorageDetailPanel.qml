@@ -38,8 +38,11 @@ Variants {
         margins.right: 20
 
         implicitWidth: Math.round(620 * Core.Theme.dpiScale)
-        implicitHeight: Math.min(Math.round(820 * Core.Theme.dpiScale),
-                                 modelData && modelData.height ? modelData.height - 120 : 820)
+        // See MemoryDetailPanel.qml for the 1400 px cap rationale.
+        implicitHeight: Math.min(
+            Math.round(1400 * Core.Theme.dpiScale),
+            modelData && modelData.height ? modelData.height - 120
+                                          : Math.round(820 * Core.Theme.dpiScale))
 
         mask: Region { item: card }
 

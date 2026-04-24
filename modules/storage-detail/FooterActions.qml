@@ -51,23 +51,27 @@ RowLayout {
         }
     }
 
+    // Labels are capitalised nouns (proper names). With the adjacent icon
+    // this reads as "launch Baobab" without the redundant verb; keeps the
+    // row from feeling heavy on 1080p where the footer competes with the
+    // content above it.
     ActionButton {
         iconText: "\ue2c7"       // folder_open-ish
-        label: "Open baobab"
+        label: "Baobab"
         accent: Core.Theme.widgetDisk
         active: Services.StorageDetail.baobabAvailable
         onClicked: Services.StorageDetail.openBaobab()
     }
     ActionButton {
         iconText: "\ue2c7"
-        label: "Open filelight"
+        label: "Filelight"
         accent: Core.Theme.widgetDisk
         active: Services.StorageDetail.filelightAvailable
         onClicked: Services.StorageDetail.openFilelight()
     }
     ActionButton {
         iconText: "\ue865"       // open_in_new
-        label: "Open $HOME"
+        label: "$HOME"
         accent: Core.Theme.accent
         onClicked: Services.StorageDetail.openHome()
     }
