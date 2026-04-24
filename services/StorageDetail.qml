@@ -90,10 +90,12 @@ Singleton {
     // Processes
     // =============================================================
 
-    // Tool availability (one-shot)
+    // Tool availability (one-shot). `command -v` is essentially free but
+    // `timeout 2` still guards against a wedged PATH lookup on exotic
+    // filesystems (autofs, stale NFS) that has bitten me before.
     Process {
         id: toolsProc
-        command: ["bash", "-c",
+        command: ["timeout", "2", "bash", "-c",
             "printf 'paccache='; command -v paccache >/dev/null && echo 1 || echo 0; " +
             "printf 'pkexec=';   command -v pkexec   >/dev/null && echo 1 || echo 0; " +
             "printf 'flatpak=';  command -v flatpak  >/dev/null && echo 1 || echo 0; " +
@@ -139,7 +141,9 @@ Singleton {
             "printf 'pacman_cache=%s\\n'    \"$(getsize /var/cache/pacman/pkg)\"; " +
             "printf 'pacman_log=%s\\n'      \"$(getsize /var/log/pacman.log)\"; " +
             "if command -v journalctl >/dev/null; then " +
-                "ju=$(journalctl --disk-usage 2>/dev/null | " +
+                // LC_ALL=C forces the 'Archived and active journals take up N'
+                // phrasing; otherwise a non-en locale would break the awk match.
+                "ju=$(LC_ALL=C journalctl --disk-usage 2>/dev/null | " +
                 "awk '/take up/ {for (i=1;i<=NF;i++) if ($i ~ /^[0-9.]+[KMGTP]?$/) print $i}' | head -1); " +
                 "printf 'journald=%s\\n' \"${ju:-NA}\"; " +
             "else printf 'journald=NA\\n'; fi; " +
@@ -405,7 +409,10 @@ Singleton {
         var k = _clampKeep(keep)
         paccacheBusy = true
         paccacheDryProc.keep = k
-        paccacheDryProc.command = ["timeout", "30", "bash", "-c",
+        // LC_ALL=C: the dry-run parser greps for English "candidate" and
+        // "disk space saved:" — non-en locale would silently report 0 pkgs.
+        paccacheDryProc.command = ["timeout", "30", "env", "LC_ALL=C",
+            "bash", "-c",
             "paccache -dk" + k + " --nocolor 2>&1"]
         paccacheDryProc.running = true
     }
