@@ -167,6 +167,35 @@ Item {
                 color: Qt.rgba(1, 1, 1, 0.08)
                 clip: true   // masks reclaimBar's right edge past the cap
 
+                // _ready gate for the stacked bars below — shared by
+                // usedBar and reclaimBar so they stay in sync.
+                //
+                // Why: the bars are stable (no Repeater), but the VERY
+                // FIRST time /proc/meminfo delivers values memTotalKB
+                // flips 0 → N and usedFrac/reclaimFrac flip 0 → real.
+                // With an always-on Behavior, that first commit sweeps
+                // from 0 → target and looks like a ~200 ms "reveal"
+                // every time the user opens the panel (DetailController
+                // gates MemoryDetail on detailActive, so memTotalKB
+                // IS 0 at panel open until the next refresh tick).
+                //
+                // Fix: flip _ready true via Qt.callLater AFTER the
+                // first data arrival. The first width/x assignment
+                // commits with Behavior disabled; subsequent 5 s
+                // refreshes animate smoothly.
+                property bool _ready: false
+                Connections {
+                    target: Services.MemoryDetail
+                    function onMemTotalKBChanged() {
+                        if (Services.MemoryDetail.memTotalKB > 0 && !barTrack._ready)
+                            Qt.callLater(function() { barTrack._ready = true })
+                    }
+                }
+                Component.onCompleted: {
+                    if (Services.MemoryDetail.memTotalKB > 0)
+                        Qt.callLater(function() { barTrack._ready = true })
+                }
+
                 Rectangle {
                     id: usedBar
                     anchors.left: parent.left
@@ -176,6 +205,7 @@ Item {
                     radius: height / 2
                     color: Core.Theme.widgetMemory
                     Behavior on width {
+                        enabled: barTrack._ready
                         NumberAnimation {
                             duration: Core.Anims.duration.smooth
                             easing.type: Core.Anims.ease.decel
@@ -193,12 +223,14 @@ Item {
                                    Core.Theme.widgetMemory.g,
                                    Core.Theme.widgetMemory.b, 0.30)
                     Behavior on x {
+                        enabled: barTrack._ready
                         NumberAnimation {
                             duration: Core.Anims.duration.smooth
                             easing.type: Core.Anims.ease.decel
                         }
                     }
                     Behavior on width {
+                        enabled: barTrack._ready
                         NumberAnimation {
                             duration: Core.Anims.duration.smooth
                             easing.type: Core.Anims.ease.decel

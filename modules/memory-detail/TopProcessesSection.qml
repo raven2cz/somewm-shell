@@ -94,32 +94,22 @@ Item {
                                        Core.Theme.widgetMemory.g,
                                        Core.Theme.widgetMemory.b, 0.55)
 
-                        // _ready gate: the Repeater re-creates every
-                        // delegate on each 5 s array-swap refresh, so
-                        // width starts at 0 and the Behavior would sweep
-                        // to target each tick ("all processes just freed
-                        // memory" — misread as a memory event).
+                        // NO Behavior on width here. The Repeater model is
+                        // a JS array that the service replaces whole on
+                        // each 5 s refresh; QML destroys every delegate
+                        // and re-creates it fresh. Any `Behavior on width`
+                        // — even with an `_ready` gate flipped in
+                        // Component.onCompleted — animates from 0 → target
+                        // on EVERY recreation (the first real width
+                        // assignment lands AFTER the first layout pass,
+                        // and the gate has already opened by then). The
+                        // user reads that as "all processes just freed
+                        // memory" every 5 seconds.
                         //
-                        // Flipping _ready in Component.onCompleted wakes
-                        // the Behavior AFTER the initial binding already
-                        // resolved to the final width — so the opening
-                        // frame draws at target. The binding inputs
-                        // (modelData.pssKB, root.maxPss) don't re-fire
-                        // after construction in the current model
-                        // (fresh delegate per swap), so nothing animates
-                        // visibly. If we later migrate to stable
-                        // delegates (ListModel diff), this same flag
-                        // still lets width reflow animate smoothly.
-                        // Do NOT "simplify" this away — see plan §3.
-                        property bool _ready: false
-                        Component.onCompleted: _ready = true
-                        Behavior on width {
-                            enabled: fillBar._ready
-                            NumberAnimation {
-                                duration: Core.Anims.duration.smooth
-                                easing.type: Core.Anims.ease.decel
-                            }
-                        }
+                        // Smooth per-tick animation would require a stable
+                        // delegate identity (ListModel + setProperty diff)
+                        // which is a larger refactor. Snapping to target
+                        // is honest and not misleading.
                     }
                 }
 

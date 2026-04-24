@@ -91,19 +91,23 @@ Item {
                         color: Qt.rgba(Core.Theme.widgetCpu.r,
                                        Core.Theme.widgetCpu.g,
                                        Core.Theme.widgetCpu.b, 0.65)
-                        // Same _ready pattern as MemoryDetail top procs
-                        // (plan §3) — 3 s refresh swaps the array whole,
-                        // without this the bars sweep from zero every
-                        // tick.
-                        property bool _ready: false
-                        Component.onCompleted: _ready = true
-                        Behavior on width {
-                            enabled: fillBar._ready
-                            NumberAnimation {
-                                duration: Core.Anims.duration.smooth
-                                easing.type: Core.Anims.ease.decel
-                            }
-                        }
+
+                        // NO Behavior on width here. The Repeater model is
+                        // a JS array that the service replaces whole on
+                        // each 3 s refresh; QML destroys every delegate
+                        // and re-creates it fresh. Any `Behavior on width`
+                        // — even with an `_ready` gate flipped in
+                        // Component.onCompleted — animates from 0 → target
+                        // on EVERY recreation (the first real width
+                        // assignment lands AFTER the first layout pass,
+                        // and the gate has already opened by then). The
+                        // user reads that as "all processes just went
+                        // idle" every 3 seconds.
+                        //
+                        // Smooth per-tick animation would require a stable
+                        // delegate identity (ListModel + setProperty diff)
+                        // which is a larger refactor. Snapping to target
+                        // is honest and not misleading.
                     }
                 }
 

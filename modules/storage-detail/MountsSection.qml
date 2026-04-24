@@ -100,12 +100,14 @@ Item {
                                               Core.Theme.widgetDisk.g,
                                               Core.Theme.widgetDisk.b, 0.55)
                             }
-                            Behavior on width {
-                                NumberAnimation {
-                                    duration: Core.Anims.duration.smooth
-                                    easing.type: Core.Anims.ease.decel
-                                }
-                            }
+
+                            // NO Behavior on width here. The Repeater
+                            // model is a JS array replaced whole on each
+                            // refresh — every delegate is destroyed and
+                            // re-created, so any `Behavior on width`
+                            // animates from 0 → target every tick and
+                            // looks like disk usage suddenly spiked.
+                            // Snap to target is honest.
                         }
                     }
 

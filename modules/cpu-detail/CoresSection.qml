@@ -81,8 +81,26 @@ Item {
                            (root.aggregate ? root.aggregate.pct : 0) / 100))
                     radius: height / 2
                     color: root._barColor(root.aggregate ? root.aggregate.pct : 0)
+
+                    // _ready gate — defer until AFTER the first real data
+                    // tick so the initial 2px → target sweep (triggered
+                    // when /proc/stat sampling lands and pct jumps 0 → N)
+                    // runs with Behavior disabled. Subsequent ticks then
+                    // animate smoothly. Qt.callLater queues past the
+                    // current binding-eval pass so the first width
+                    // commit is already done before we flip _ready.
                     property bool _ready: false
-                    Component.onCompleted: _ready = true
+                    Connections {
+                        target: Services.CpuDetail
+                        function onStatsLoadedChanged() {
+                            if (Services.CpuDetail.statsLoaded && !allBar._ready)
+                                Qt.callLater(function() { allBar._ready = true })
+                        }
+                    }
+                    Component.onCompleted: {
+                        if (Services.CpuDetail.statsLoaded)
+                            Qt.callLater(function() { allBar._ready = true })
+                    }
                     Behavior on width {
                         enabled: allBar._ready
                         NumberAnimation {
@@ -141,15 +159,19 @@ Item {
                                    modelData.pct / 100))
                             radius: height / 2
                             color: root._barColor(modelData.pct)
-                            property bool _ready: false
-                            Component.onCompleted: _ready = true
-                            Behavior on width {
-                                enabled: coreBar._ready
-                                NumberAnimation {
-                                    duration: Core.Anims.duration.smooth
-                                    easing.type: Core.Anims.ease.decel
-                                }
-                            }
+
+                            // NO Behavior on width here. The Repeater
+                            // model is a JS array that the service
+                            // replaces whole on each 2 s refresh; QML
+                            // destroys every delegate and re-creates it
+                            // fresh. A `Behavior on width` — even with
+                            // an `_ready` gate — animates from 0 →
+                            // target on every recreation because the
+                            // first real width assignment lands AFTER
+                            // the first layout pass, and the gate has
+                            // already opened by then. The user reads
+                            // that as "all cores just went idle" every
+                            // 2 seconds. Snapping to target is honest.
                             Behavior on color { Components.CAnim {} }
                         }
                     }

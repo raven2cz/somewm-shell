@@ -138,19 +138,23 @@ Item {
                         color: Qt.rgba(Core.Theme.widgetDisk.r,
                                        Core.Theme.widgetDisk.g,
                                        Core.Theme.widgetDisk.b, 0.65)
-                        // _ready gate — same reasoning as TopProcessesSection
-                        // (plan §3): prevents from-zero sweep on each 30 s
-                        // array-swap refresh while leaving reflow animation
-                        // intact for any future stable-model migration.
-                        property bool _ready: false
-                        Component.onCompleted: _ready = true
-                        Behavior on width {
-                            enabled: fillBar._ready
-                            NumberAnimation {
-                                duration: Core.Anims.duration.smooth
-                                easing.type: Core.Anims.ease.decel
-                            }
-                        }
+
+                        // NO Behavior on width here. The Repeater model is
+                        // a JS array that the service replaces whole on
+                        // each refresh; QML destroys every delegate and
+                        // re-creates it fresh. Any `Behavior on width` —
+                        // even with an `_ready` gate flipped in
+                        // Component.onCompleted — animates from 0 → target
+                        // on EVERY recreation (the first real width
+                        // assignment lands AFTER the first layout pass,
+                        // and the gate has already opened by then). The
+                        // user reads that as a from-zero sweep every
+                        // refresh tick.
+                        //
+                        // Smooth per-tick animation would require a stable
+                        // delegate identity (ListModel + setProperty diff)
+                        // which is a larger refactor. Snapping to target
+                        // is honest and not misleading.
                     }
                 }
 
