@@ -24,6 +24,10 @@ Item {
         canvas.requestPaint()
     }
 
+    // Repaint when the array is rebound externally (e.g. TrendSection binds
+    // its samples straight to dataPoints and never calls addPoint).
+    onDataPointsChanged: canvas.requestPaint()
+
     Canvas {
         id: canvas
         anchors.fill: parent

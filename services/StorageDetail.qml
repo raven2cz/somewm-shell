@@ -390,22 +390,38 @@ Singleton {
     // Actions
     // =============================================================
 
+    // Clamp `keep` to a small positive int — paccache -dkN expects a bare
+    // integer and we pass this directly on the command line. Any JS caller
+    // could hand us a float / string, so normalise aggressively.
+    function _clampKeep(keep) {
+        var n = parseInt(keep) || 2
+        if (n < 0) n = 0
+        if (n > 999) n = 999
+        return n
+    }
+
     function paccacheDryRun(keep) {
         if (!paccacheAvailable || paccacheBusy) return
+        var k = _clampKeep(keep)
         paccacheBusy = true
-        paccacheDryProc.keep = keep || 2
-        paccacheDryProc.command = ["bash", "-c",
-            "paccache -dk" + (keep || 2) + " --nocolor 2>&1"]
+        paccacheDryProc.keep = k
+        paccacheDryProc.command = ["timeout", "30", "bash", "-c",
+            "paccache -dk" + k + " --nocolor 2>&1"]
         paccacheDryProc.running = true
     }
 
     function paccacheClean(keep) {
         if (!paccacheAvailable || !pkexecAvailable || paccacheBusy) return
         if (paccacheStatus !== "dryrun" || paccachePreviewCount <= 0) return
+        var k = _clampKeep(keep)
         paccacheBusy = true
-        paccacheRunProc.keep = keep || 2
+        paccacheRunProc.keep = k
+        // No outer timeout on the pkexec path — the user may sit at the
+        // polkit prompt for a while, and paccache itself already finishes
+        // quickly once it starts. The dry-run timeout above is enough to
+        // catch a wedged paccache upstream.
         paccacheRunProc.command = ["/usr/bin/pkexec", "/usr/bin/paccache",
-                                   "-rk" + (keep || 2), "--nocolor"]
+                                   "-rk" + k, "--nocolor"]
         paccacheRunProc.running = true
     }
 

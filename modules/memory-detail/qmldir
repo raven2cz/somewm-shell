@@ -1,7 +1,6 @@
-module memory-detail
-MemoryDetailPanel 1.0 MemoryDetailPanel.qml
-SystemOverviewSection 1.0 SystemOverviewSection.qml
-SomewmInternalsSection 1.0 SomewmInternalsSection.qml
-TopProcessesSection 1.0 TopProcessesSection.qml
-TrendSection 1.0 TrendSection.qml
-FooterActions 1.0 FooterActions.qml
+MemoryDetailPanel MemoryDetailPanel.qml
+SystemOverviewSection SystemOverviewSection.qml
+SomewmInternalsSection SomewmInternalsSection.qml
+TopProcessesSection TopProcessesSection.qml
+TrendSection TrendSection.qml
+FooterActions FooterActions.qml

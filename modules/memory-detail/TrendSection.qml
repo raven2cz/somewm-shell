@@ -64,7 +64,6 @@ Item {
                     maxPoints: 60
                     lineColor: parent.graphColor
                     dataPoints: parent.samples
-                    function repaint() { /* data change already triggers repaint */ }
                 }
             }
 

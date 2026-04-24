@@ -148,10 +148,37 @@ Singleton {
     // Processes
     // =============================================================
 
-    // Resolve somewm pid
+    // Resolve somewm pid by asking the IPC-connected compositor itself —
+    // pidof -s somewm is wrong in the nested-sandbox case (it returns the
+    // outer compositor pid). Reading /proc/self/status from inside the
+    // compositor's Lua state guarantees we measure the process behind the
+    // socket we're actually talking to. `pidof -s` is only used as a final
+    // fallback if /proc/self isn't readable from inside the eval.
     Process {
         id: pidProc
-        command: ["bash", "-c", "pidof -s somewm 2>/dev/null || true"]
+        command: ["timeout", "2", "somewm-client", "eval",
+                  "local f=io.open('/proc/self/status','r'); " +
+                  "if not f then return '0' end; " +
+                  "local body=f:read('*a'); f:close(); " +
+                  "return tostring(body:match('Pid:%s+(%d+)') or 0)"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var body = root._ipcValue(text).trim()
+                var pid = parseInt(body) || 0
+                if (pid > 0) {
+                    root.somewmPid = pid
+                    if (!somewmRssProc.running) somewmRssProc.running = true
+                } else {
+                    if (!pidFallbackProc.running) pidFallbackProc.running = true
+                }
+            }
+        }
+    }
+
+    // Fallback pid resolver used only when the in-process /proc read fails.
+    Process {
+        id: pidFallbackProc
+        command: ["timeout", "2", "bash", "-c", "pidof -s somewm 2>/dev/null || true"]
         stdout: StdioCollector {
             onStreamFinished: {
                 var pid = parseInt((text || "").trim()) || 0
@@ -166,7 +193,7 @@ Singleton {
     // somewm RSS/PSS from /proc/<pid>/smaps_rollup
     Process {
         id: somewmRssProc
-        command: ["bash", "-c",
+        command: ["timeout", "2", "bash", "-c",
             "pid=" + root.somewmPid + "; " +
             "[ -r /proc/$pid/smaps_rollup ] || { echo NOFILE; exit 0; }; " +
             "awk '" +
@@ -193,7 +220,7 @@ Singleton {
     // root.memory_stats(true) flat k=v via somewm-client eval
     Process {
         id: somewmProc
-        command: ["somewm-client", "eval",
+        command: ["timeout", "3", "somewm-client", "eval",
             "local ok,m=pcall(function() return root.memory_stats(true) end); " +
             "if not ok then return 'error=memory_stats_failed' end; " +
             "return string.format(" +
@@ -219,15 +246,17 @@ Singleton {
         }
     }
 
-    // PSS scan — single awk per pid, timeout-guarded
+    // PSS scan — single awk per pid, timeout-guarded (outer timeout caps the
+    // whole /proc walk; inner `timeout 1` bounds any single awk invocation so
+    // a stuck /proc entry cannot wedge the scan).
     Process {
         id: procsProc
-        command: ["timeout", "4", "bash", "-c",
+        command: ["timeout", "6", "bash", "-c",
             "unread=0; " +
             "for d in /proc/[0-9]*; do " +
                 "pid=${d##*/}; " +
                 "if [ ! -r \"$d/smaps_rollup\" ]; then unread=$((unread+1)); continue; fi; " +
-                "awk 'BEGIN{p=0;r=0} " +
+                "timeout 1 awk 'BEGIN{p=0;r=0} " +
                     "/^Pss:/{p+=$2} /^Rss:/{r+=$2} " +
                     "END{printf \"%d\\t%d\\t'\"$pid\"'\\n\", p+0, r+0}' " +
                     "\"$d/smaps_rollup\" 2>/dev/null; " +
@@ -288,6 +317,19 @@ Singleton {
         }
     }
 
+    // Expected keys for memory_stats eval — must match the format string in
+    // somewmProc.command. Missing keys after a successful eval signal a C API
+    // drift, so we log once per drift event to catch silent renames in CI.
+    readonly property var _expectedStatKeys: [
+        "lua_bytes", "clients", "drawable_shm_count", "drawable_shm_bytes",
+        "wibox_count", "wibox_surface_bytes",
+        "wallpaper_entries", "wallpaper_estimated_bytes",
+        "wallpaper_cairo_bytes", "wallpaper_shm_bytes",
+        "drawable_surface_bytes",
+        "malloc_used_bytes", "malloc_free_bytes", "malloc_releasable_bytes"
+    ]
+    property string _lastSchemaWarning: ""
+
     function _parseSomewm(text) {
         try {
             var body = root._ipcValue(text).trim()
@@ -300,6 +342,20 @@ Singleton {
             for (var i = 0; i < tokens.length; i++) {
                 var kv = tokens[i].split("=")
                 if (kv.length === 2) m[kv[0]] = parseInt(kv[1]) || 0
+            }
+            // Schema-drift detector — warn once when the eval output stops
+            // carrying a field we expect. This catches C-API field renames
+            // without requiring a live test.
+            var missing = []
+            for (var k = 0; k < _expectedStatKeys.length; k++) {
+                if (!(_expectedStatKeys[k] in m)) missing.push(_expectedStatKeys[k])
+            }
+            if (missing.length > 0) {
+                var sig = missing.join(",")
+                if (sig !== _lastSchemaWarning) {
+                    console.warn("MemoryDetail: schema drift — missing keys: " + sig)
+                    root._lastSchemaWarning = sig
+                }
             }
             root.luaBytes              = m.lua_bytes || 0
             root.clientsCount          = m.clients || 0
@@ -403,11 +459,15 @@ Singleton {
     }
 
     function copySnapshot() {
-        // Run snapshot --tsv and pipe to wl-copy.
-        Quickshell.execDetached(["bash", "-c",
-            "HOME=$HOME " +
-            "\"$HOME/git/github/somewm/plans/scripts/somewm-memory-snapshot.sh\" " +
-            "--tsv 2>/dev/null | wl-copy"])
+        var home = Quickshell.env("HOME") || ""
+        if (home === "") { console.error("MemoryDetail.copySnapshot: HOME unset"); return }
+        // sh -c with positional args — the script path is passed as "$1" out
+        // of the shell's parse path, so there is no interpolation / injection
+        // risk even if HOME ever contained metacharacters.
+        var script = home + "/git/github/somewm/plans/scripts/somewm-memory-snapshot.sh"
+        Quickshell.execDetached(["sh", "-c",
+            "timeout 10 \"$1\" --tsv 2>/dev/null | wl-copy",
+            "copySnapshot", script])
     }
 
     function openBaseline() {

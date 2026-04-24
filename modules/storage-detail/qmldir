@@ -1,6 +1,5 @@
-module storage-detail
-StorageDetailPanel 1.0 StorageDetailPanel.qml
-MountsSection 1.0 MountsSection.qml
-HotspotsSection 1.0 HotspotsSection.qml
-TopDirsSection 1.0 TopDirsSection.qml
-FooterActions 1.0 FooterActions.qml
+StorageDetailPanel StorageDetailPanel.qml
+MountsSection MountsSection.qml
+HotspotsSection HotspotsSection.qml
+TopDirsSection TopDirsSection.qml
+FooterActions FooterActions.qml

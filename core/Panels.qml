@@ -93,13 +93,18 @@ Singleton {
         // Mutual exclusion: close overlapping panels
         var exclusive = ["dashboard", "wallpapers", "weather", "ai-chat",
                          "memory-detail", "storage-detail"]
+        var pins = Object.assign({}, panelPin)
         if (!state[name] && exclusive.indexOf(name) >= 0) {
-            exclusive.forEach(function(p) { state[p] = false })
+            exclusive.forEach(function(p) {
+                if (state[p]) delete pins[p]
+                state[p] = false
+            })
         }
         state[name] = !state[name]
         openPanels = state
         // Clear any pin when the panel closes
-        if (!state[name]) _setPin(name, "")
+        if (!state[name]) delete pins[name]
+        panelPin = pins
     }
 
     // Toggle a panel and pin it to a specific screen (by name or index string).
@@ -121,6 +126,7 @@ Singleton {
 
     function closeAll() {
         openPanels = ({})
+        panelPin = ({})
     }
 
     // IPC: external control from rc.lua via qs ipc
