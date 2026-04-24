@@ -17,7 +17,7 @@ patterns and extend this document.
 
 | Target | File | Methods |
 |---|---|---|
-| `somewm-shell:panels` | `core/Panels.qml` | `toggle(name)`, `close(name)`, `closeAll()`, `showOsd(type, value)` |
+| `somewm-shell:panels` | `core/Panels.qml` | `toggle(name)`, `toggleOnScreen(name, screenName)`, `close(name)`, `closeAll()`, `showOsd(type, value)` |
 | `somewm-shell:compositor` | `services/Compositor.qml` | `invalidate()`, `setScreen(name)`, `setTag(name)`, `focus(cls)`, `spawn(cmd)` |
 | `somewm-shell:audio` | `services/Audio.qml` | `volumeUp()`, `volumeDown()`, `toggleMute()` |
 | `somewm-shell:brightness` | `services/Brightness.qml` | `up()`, `down()` |
@@ -25,6 +25,13 @@ patterns and extend this document.
 | `somewm-shell:portraits` | `services/Portraits.qml` | `refresh()` |
 | `somewm-shell:notifications` | `core/NotifStore.qml` | `refresh()` |
 | `somewm-shell:collage` | `modules/collage/Collage.qml` | `editToggle()` |
+
+`toggleOnScreen(name, screenName)` pins the panel to a specific output (by
+`screen.name`, e.g. `HDMI-A-1`). The pin is consulted by each panel's
+`shouldShow` and cleared on close. Used by `memory.lua` / `disk.lua` wibar
+left-click so a click on the Samsung TV output opens the detail panel on
+that output rather than on whichever output currently holds keyboard focus.
+Passing an empty `screenName` falls back to the active-screen heuristic.
 
 Notifications use a single-owner pattern: `core/NotifStore.qml` owns the
 `IpcHandler` and the IPC surface (fetch, dismiss, clear, copy). The sidebar

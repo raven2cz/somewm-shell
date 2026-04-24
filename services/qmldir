@@ -10,3 +10,5 @@ singleton Network Network.qml
 singleton CavaService CavaService.qml
 singleton DockApps DockApps.qml
 singleton Portraits Portraits.qml
+singleton MemoryDetail MemoryDetail.qml
+singleton StorageDetail StorageDetail.qml

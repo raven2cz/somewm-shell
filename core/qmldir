@@ -6,3 +6,4 @@ singleton Panels Panels.qml
 singleton Constants Constants.qml
 singleton NotifStore NotifStore.qml
 singleton FileUtil FileUtil.qml
+singleton DetailController DetailController.qml
