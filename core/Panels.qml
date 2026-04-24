@@ -32,15 +32,39 @@ Singleton {
     // Requested tab index for dashboard (set by media/notif shortcuts, consumed by Dashboard.qml)
     property int requestedTab: -1
 
+    // Central registry of panel names.
+    //
+    // Two lists, ONE source of truth. Keep them declared here (not
+    // inlined inside anyOverlayOpen and toggle()) so adding a new detail
+    // panel is a single-line edit in each list instead of a triple edit
+    // across the file — the old shape bit us when memory/storage were
+    // added (review round 1 + gemini). Lists are intentionally
+    // asymmetric — see notes below.
+    //
+    // overlayPanels: every panel that should count as "an overlay is
+    // open" for the compositor scroll-guard IPC push. Includes
+    // sidebar-left so mouse-wheel over the sidebar doesn't leak to
+    // desktop tag-switching.
+    readonly property var overlayPanels: [
+        "dashboard", "wallpapers", "weather", "ai-chat",
+        "sidebar-left",
+        "memory-detail", "storage-detail",
+    ]
+    // exclusivePanels: panels that mutually close each other when one
+    // opens. DELIBERATELY excludes sidebar-left — the sidebar is a
+    // non-mutually-exclusive overlay (it can coexist with the dashboard
+    // or a detail panel). Do NOT merge the two lists; the asymmetry is
+    // load-bearing and asserted by test-detail-panels.sh.
+    readonly property var exclusivePanels: [
+        "dashboard", "wallpapers", "weather", "ai-chat",
+        "memory-detail", "storage-detail",
+    ]
+
     // Track whether any overlay panel is open (for compositor scroll-guard).
-    // Includes non-mutually-exclusive panels like sidebar-left so mouse-wheel
-    // over the panel doesn't leak to desktop tag-switching.
     readonly property bool anyOverlayOpen: {
         var panels = openPanels
-        var overlays = ["dashboard", "wallpapers", "weather", "ai-chat",
-                        "sidebar-left", "memory-detail", "storage-detail"]
-        for (var i = 0; i < overlays.length; i++) {
-            if (panels[overlays[i]] === true) return true
+        for (var i = 0; i < overlayPanels.length; i++) {
+            if (panels[overlayPanels[i]] === true) return true
         }
         return false
     }
@@ -90,12 +114,11 @@ Singleton {
         }
 
         var state = Object.assign({}, openPanels)
-        // Mutual exclusion: close overlapping panels
-        var exclusive = ["dashboard", "wallpapers", "weather", "ai-chat",
-                         "memory-detail", "storage-detail"]
+        // Mutual exclusion: close overlapping panels (see exclusivePanels
+        // declaration above; sidebar-left is deliberately absent).
         var pins = Object.assign({}, panelPin)
-        if (!state[name] && exclusive.indexOf(name) >= 0) {
-            exclusive.forEach(function(p) {
+        if (!state[name] && exclusivePanels.indexOf(name) >= 0) {
+            exclusivePanels.forEach(function(p) {
                 if (state[p]) delete pins[p]
                 state[p] = false
             })
