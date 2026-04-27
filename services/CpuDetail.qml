@@ -324,7 +324,7 @@ Singleton {
         id: nvidiaProcsProc
         command: ["timeout", "3", "bash", "-c",
             "nvidia-smi pmon -c 1 -s um 2>/dev/null | " +
-            "awk '!/^#/ && NF >= 12 { " +
+            "awk '!/^#/ && NF >= 12 && $2 ~ /^[0-9]+$/ { " +
             "fb = ($10 == \"-\") ? 0 : $10; " +
             "sm = ($4  == \"-\") ? 0 : $4;  " +
             "print $2 \",\" $12 \",\" fb \",\" sm }'"
@@ -516,8 +516,15 @@ Singleton {
                 if (!line) continue
                 var p = line.split(",").map(function(x) { return x.trim() })
                 if (p.length < 3) continue
+                // Defense-in-depth: pmon emits a placeholder row with pid
+                // "-" when no GPU processes are running. The awk pipeline
+                // already filters those out, but guard here too so a
+                // future pmon format change can't surface a fake process
+                // (pid 0, name "-") in the section.
+                var pid = parseInt(p[0]) || 0
+                if (pid <= 0) continue
                 out.push({
-                    pid: parseInt(p[0]) || 0,
+                    pid: pid,
                     name: p[1] || "?",
                     vramMB: parseFloat(p[2]) || 0,
                     sm: p.length >= 4 ? (parseFloat(p[3]) || 0) : 0
