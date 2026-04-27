@@ -1,4 +1,4 @@
-// SomewmInternalsSection — numbers from root.memory_stats(true) plus
+// SomewmInternalsSection — numbers from somewm.memory.stats(true) plus
 // /proc/<somewm_pid>/smaps_rollup. Two-column grid of rows.
 import QtQuick
 import QtQuick.Layouts

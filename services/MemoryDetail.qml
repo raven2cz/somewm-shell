@@ -5,9 +5,9 @@ pragma Singleton
 // Nothing polls until `detailActive` is true (set by Core.DetailController
 // when the panel opens). Three independent poll loops:
 //
-//   * /proc/meminfo                                — 2 s
-//   * somewm-client eval root.memory_stats(true)   — 3 s
-//   * PSS scan of /proc/<pid>/smaps_rollup (top 15)— 5 s, timeout-guarded
+//   * /proc/meminfo                                       — 2 s
+//   * somewm-client eval somewm.memory.stats(true)         — 3 s
+//   * PSS scan of /proc/<pid>/smaps_rollup (top 15)        — 5 s, timeout-guarded
 //
 // Plus a derived somewm RSS/PSS from /proc/<somewm_pid>/smaps_rollup
 // (values are not exposed by the Lua API; we get them here the same way
@@ -49,7 +49,7 @@ Singleton {
     property int somewmPssKB: 0
     property int somewmPrivDirtyKB: 0
 
-    // --- root.memory_stats() + nested tables ---
+    // --- somewm.memory.stats() + nested tables ---
     property int luaBytes: 0
     property int clientsCount: 0
     property int drawableShmCount: 0
@@ -273,11 +273,11 @@ Singleton {
         }
     }
 
-    // root.memory_stats(true) flat k=v via somewm-client eval
+    // somewm.memory.stats(true) flat k=v via somewm-client eval
     Process {
         id: somewmProc
         command: ["timeout", "3", "somewm-client", "eval",
-            "local ok,m=pcall(function() return root.memory_stats(true) end); " +
+            "local ok,m=pcall(function() return somewm.memory.stats(true) end); " +
             "if not ok then return 'error=memory_stats_failed' end; " +
             "return string.format(" +
             "'lua_bytes=%d clients=%d drawable_shm_count=%d drawable_shm_bytes=%d " +
