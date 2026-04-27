@@ -85,16 +85,28 @@ Singleton {
     readonly property string fontIcon: "Material Symbols Rounded"
 
     // === DPI scale factor ===
-    // Standard=96dpi (scale 1.0), 4K≈120-163dpi (scale 1.25-1.75)
+    // Standard=96dpi (scale 1.0), 4K≈120-163dpi (scale 1.25-1.75).
+    //
+    // Multi-monitor: pick the largest logical width across all outputs
+    // rather than screens[0]. screens[0] order is not stable when an
+    // output is hot-plugged or rotated — a portrait-rotated 4K panel
+    // (logical width 2160) used to flip the whole theme down to scale
+    // 1.0 even though the primary 4K landscape was still on.
+    //
+    // Wayland reports post-rotation dimensions, so a 4K portrait
+    // contributes width=2160 and a 4K landscape contributes width=3840;
+    // the landscape wins and the user-facing scale stays put.
     readonly property real dpiScale: {
         var screens = Quickshell.screens
         if (!screens || screens.length === 0) return 1.0
-        var s = screens[0]
-        if (!s) return 1.0
-        var w = s.width
-        if (w >= 3840) return 1.35    // 4K
-        if (w >= 2560) return 1.15    // QHD
-        return 1.0                     // FHD
+        var maxWidth = 0
+        for (var i = 0; i < screens.length; i++) {
+            var s = screens[i]
+            if (s && s.width > maxWidth) maxWidth = s.width
+        }
+        if (maxWidth >= 3840) return 1.35    // 4K
+        if (maxWidth >= 2560) return 1.15    // QHD
+        return 1.0                            // FHD
     }
 
     // === Typography sizes (child QtObject + alias, valid QML) ===
