@@ -53,71 +53,96 @@ Item {
             Layout.fillWidth: true
         }
 
-        Repeater {
-            model: root.procs
+        // Fixed slot count: the service caps topProcs at 10
+        // (CpuDetail.qml line ~476). Rendering a constant N keeps the
+        // panel height stable across refreshes — sections below don't
+        // jump when the process list grows or shrinks (hidepid filter,
+        // short-lived procs). The wrapper Column collapses during the
+        // loading / empty states so the "Sampling…" banner doesn't sit
+        // on top of 10 invisible rows.
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: Core.Theme.spacing.sm
+            visible: Services.CpuDetail.topProcsLoaded && root.procs.length > 0
 
-            delegate: RowLayout {
-                Layout.fillWidth: true
-                spacing: Core.Theme.spacing.sm
+            Repeater {
+                model: 10
 
-                Components.StyledText {
-                    Layout.preferredWidth: Math.round(130 * Core.Theme.dpiScale)
-                    text: (modelData.name || "?") +
-                          "  " + "<span style='color:" + Core.Theme.fgMuted +
-                          "'>" + modelData.pid + "</span>"
-                    textFormat: Text.StyledText
-                    elide: Text.ElideRight
-                    font.family: Core.Theme.fontUI
-                    font.pixelSize: Core.Theme.fontSize.sm
-                    color: Core.Theme.fgMain
-                }
+                delegate: RowLayout {
+                    id: row
 
-                Rectangle {
+                    readonly property var proc: index < root.procs.length
+                                                ? root.procs[index] : null
+                    readonly property bool hasData: proc !== null
+
                     Layout.fillWidth: true
-                    Layout.preferredHeight: Math.round(10 * Core.Theme.dpiScale)
-                    radius: height / 2
-                    color: Qt.rgba(1, 1, 1, 0.04)
+                    spacing: Core.Theme.spacing.sm
+                    opacity: hasData ? 1.0 : 0.0
+
+                    Components.StyledText {
+                        Layout.preferredWidth: Math.round(130 * Core.Theme.dpiScale)
+                        text: row.hasData
+                              ? (row.proc.name || "?") +
+                                "  " + "<span style='color:" + Core.Theme.fgMuted +
+                                "'>" + row.proc.pid + "</span>"
+                              : ""
+                        textFormat: Text.StyledText
+                        elide: Text.ElideRight
+                        font.family: Core.Theme.fontUI
+                        font.pixelSize: Core.Theme.fontSize.sm
+                        color: Core.Theme.fgMain
+                    }
 
                     Rectangle {
-                        id: fillBar
-                        anchors.left: parent.left
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: {
-                            var m = Math.max(1, root.maxPct)
-                            return Math.max(2, parent.width * (modelData.pct / m))
-                        }
-                        height: parent.height
+                        id: track
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: Math.round(10 * Core.Theme.dpiScale)
                         radius: height / 2
-                        color: Qt.rgba(Core.Theme.widgetCpu.r,
-                                       Core.Theme.widgetCpu.g,
-                                       Core.Theme.widgetCpu.b, 0.65)
+                        color: Qt.rgba(1, 1, 1, 0.04)
 
-                        // NO Behavior on width here. The Repeater model is
-                        // a JS array that the service replaces whole on
-                        // each 3 s refresh; QML destroys every delegate
-                        // and re-creates it fresh. Any `Behavior on width`
-                        // — even with an `_ready` gate flipped in
-                        // Component.onCompleted — animates from 0 → target
-                        // on EVERY recreation (the first real width
-                        // assignment lands AFTER the first layout pass,
-                        // and the gate has already opened by then). The
-                        // user reads that as "all processes just went
-                        // idle" every 3 seconds.
-                        //
-                        // Smooth per-tick animation would require a stable
-                        // delegate identity (ListModel + setProperty diff)
-                        // which is a larger refactor. Snapping to target
-                        // is honest and not misleading.
+                        Rectangle {
+                            id: fillBar
+                            anchors.left: parent.left
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: {
+                                if (!row.hasData) return 0
+                                var m = Math.max(1, root.maxPct)
+                                return Math.max(2, track.width *
+                                                  (row.proc.pct / m))
+                            }
+                            height: parent.height
+                            radius: height / 2
+                            color: Qt.rgba(Core.Theme.widgetCpu.r,
+                                           Core.Theme.widgetCpu.g,
+                                           Core.Theme.widgetCpu.b, 0.65)
+
+                            // NO Behavior on width here. The Repeater model is
+                            // a JS array that the service replaces whole on
+                            // each 3 s refresh; QML destroys every delegate
+                            // and re-creates it fresh. Any `Behavior on width`
+                            // — even with an `_ready` gate flipped in
+                            // Component.onCompleted — animates from 0 → target
+                            // on EVERY recreation (the first real width
+                            // assignment lands AFTER the first layout pass,
+                            // and the gate has already opened by then). The
+                            // user reads that as "all processes just went
+                            // idle" every 3 seconds.
+                            //
+                            // Smooth per-tick animation would require a stable
+                            // delegate identity (ListModel + setProperty diff)
+                            // which is a larger refactor. Snapping to target
+                            // is honest and not misleading.
+                        }
                     }
-                }
 
-                Components.StyledText {
-                    Layout.preferredWidth: Math.round(70 * Core.Theme.dpiScale)
-                    text: modelData.pct.toFixed(1) + "%"
-                    font.family: Core.Theme.fontMono
-                    font.pixelSize: Core.Theme.fontSize.sm
-                    color: Core.Theme.fgMain
-                    horizontalAlignment: Text.AlignRight
+                    Components.StyledText {
+                        Layout.preferredWidth: Math.round(70 * Core.Theme.dpiScale)
+                        text: row.hasData ? row.proc.pct.toFixed(1) + "%" : ""
+                        font.family: Core.Theme.fontMono
+                        font.pixelSize: Core.Theme.fontSize.sm
+                        color: Core.Theme.fgMain
+                        horizontalAlignment: Text.AlignRight
+                    }
                 }
             }
         }

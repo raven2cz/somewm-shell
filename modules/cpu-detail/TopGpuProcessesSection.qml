@@ -50,6 +50,15 @@ Item {
                     color: Core.Theme.fgMain
                 }
                 Components.StyledText {
+                    Layout.preferredWidth: Math.round(50 * Core.Theme.dpiScale)
+                    text: (modelData.sm || 0) + "%"
+                    font.family: Core.Theme.fontMono
+                    font.pixelSize: Core.Theme.fontSize.sm
+                    color: (modelData.sm || 0) > 0 ? Core.Theme.widgetCpu
+                                                   : Core.Theme.fgMuted
+                    horizontalAlignment: Text.AlignRight
+                }
+                Components.StyledText {
                     Layout.preferredWidth: Math.round(80 * Core.Theme.dpiScale)
                     text: Math.round(modelData.vramMB) + " MiB"
                     font.family: Core.Theme.fontMono

@@ -311,14 +311,23 @@ Singleton {
         }
     }
 
-    // nvidia-smi compute/graphics apps
+    // nvidia-smi GPU processes (compute + graphics, both types).
+    // We previously used `--query-graphics-apps` here, but that flag
+    // does not exist in nvidia-smi — the second branch silently failed
+    // and the section stayed empty for users without CUDA workloads.
+    // `pmon -s um` lists both C and G types with SM utilization (col 4)
+    // and framebuffer MB (col 10); awk emits CSV that _parseGpuProcs
+    // reads as `pid,name,vramMB,sm`. SM% is the live signal — VRAM
+    // barely drifts on a steady-state desktop, so without SM% the
+    // section looks frozen even though the timer fires every 2 s.
     Process {
         id: nvidiaProcsProc
         command: ["timeout", "3", "bash", "-c",
-            "{ nvidia-smi --query-compute-apps=pid,process_name,used_memory " +
-            "  --format=csv,noheader,nounits 2>/dev/null; " +
-            "  nvidia-smi --query-graphics-apps=pid,process_name,used_memory " +
-            "  --format=csv,noheader,nounits 2>/dev/null; } | sort -u"
+            "nvidia-smi pmon -c 1 -s um 2>/dev/null | " +
+            "awk '!/^#/ && NF >= 12 { " +
+            "fb = ($10 == \"-\") ? 0 : $10; " +
+            "sm = ($4  == \"-\") ? 0 : $4;  " +
+            "print $2 \",\" $12 \",\" fb \",\" sm }'"
         ]
         stdout: StdioCollector {
             onStreamFinished: root._parseGpuProcs(text)
@@ -510,9 +519,15 @@ Singleton {
                 out.push({
                     pid: parseInt(p[0]) || 0,
                     name: p[1] || "?",
-                    vramMB: parseFloat(p[2]) || 0
+                    vramMB: parseFloat(p[2]) || 0,
+                    sm: p.length >= 4 ? (parseFloat(p[3]) || 0) : 0
                 })
             }
+            // Sort by SM% desc, then VRAM desc — busy GPU users float up.
+            out.sort(function(a, b) {
+                if (b.sm !== a.sm) return b.sm - a.sm
+                return b.vramMB - a.vramMB
+            })
             root.gpuProcs = out
         } catch (e) {
             console.error("CpuDetail._parseGpuProcs:", e)
