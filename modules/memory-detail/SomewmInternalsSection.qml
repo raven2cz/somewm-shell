@@ -151,7 +151,8 @@ Item {
             wrapMode: Text.WordWrap
             text: "somewm baseline on this hardware ≈ 2× sway — AwesomeWM Lua " +
                   "+ cairo widgets + wallpaper preload cache. Stable memory " +
-                  "pattern, not a leak. See plans/docs/memory-baseline.md."
+                  "pattern, not a leak. See memory-baseline.md in the somewm " +
+                  "fork's plans/docs/."
             font.family: Core.Theme.fontUI
             font.pixelSize: Core.Theme.fontSize.xs
             color: Core.Theme.fgMuted

@@ -308,7 +308,7 @@ No DOM, no virtual DOM, no diffing.
 ## Directory Structure
 
 ```
-plans/project/somewm-shell/
+
 ├── shell.qml                  # Entry point (ShellRoot + ModuleLoaders)
 ├── deploy.sh                  # Sync to ~/.config/quickshell/somewm/
 ├── config.default.json        # Default module enable/disable + animation scale
@@ -538,20 +538,20 @@ Current: de-skewed, 1.4x scale. Others: skewed, opacity 0.5.
 ### Edit → Deploy → Restart
 
 ```bash
-# 1. Edit source files in plans/project/somewm-shell/
-vim plans/project/somewm-shell/modules/dock/Dock.qml
+# 1. Edit source files in this repo
+vim modules/dock/Dock.qml
 
 # 2. Deploy to Quickshell config directory
-plans/project/somewm-shell/deploy.sh
+./deploy.sh
 
 # 3. Restart Quickshell (from a running somewm session)
 kill $(pgrep -f 'qs -c somewm'); qs -c somewm -n -d &
 
 # Or one-liner:
-plans/project/somewm-shell/deploy.sh && kill $(pgrep -f 'qs -c somewm'); qs -c somewm -n -d &
+./deploy.sh && kill $(pgrep -f 'qs -c somewm'); qs -c somewm -n -d &
 ```
 
-**IMPORTANT:** Always edit in `plans/project/somewm-shell/`, never in `~/.config/quickshell/somewm/`.
+**IMPORTANT:** Always edit in this repo, never in `~/.config/quickshell/somewm/`.
 The deploy script rsyncs source → config. Direct edits in config are overwritten.
 
 ### QML Cache
@@ -580,10 +580,10 @@ somewm's rc.lua launches QS with `awful.spawn.once("qs -c somewm -n -d")`. This 
 
 ```bash
 # All tests (structural, syntax, imports — no running compositor needed)
-bash plans/project/somewm-shell/tests/test-all.sh
+bash tests/test-all.sh
 
 # Verbose output
-bash plans/project/somewm-shell/tests/test-all.sh --verbose
+bash tests/test-all.sh --verbose
 ```
 
 Tests validate: file structure, required files exist, QML import consistency,
@@ -769,7 +769,7 @@ Features:
 ### 1. Create the module directory
 
 ```
-plans/project/somewm-shell/modules/mymodule/
+modules/mymodule/
 ├── MyModule.qml    # Main panel
 └── qmldir          # Module registration
 ```
@@ -851,8 +851,9 @@ See existing modules for reference. Remember:
 - Add `ModuleLoader` entry in `shell.qml`
 - Add `qmldir` with `MyModule MyModule.qml`
 - Add to exclusive group in `Panels.qml` if it should close other panels
-- Add keybinding in `plans/project/somewm-one/rc.lua`
-- Run `deploy.sh` after all changes
+- Add keybinding in `rc.lua` of [somewm-one](https://github.com/raven2cz/somewm-one)
+  (override path with `SOMEWM_ONE_PATH`; default `~/git/github/somewm-one`)
+- Run `./deploy.sh` after all changes
 
 ## Design Principles
 
@@ -917,22 +918,22 @@ in a single file (avoiding import complexity for tightly-coupled elements):
 
 ```bash
 # Deploy
-plans/project/somewm-shell/deploy.sh
+./deploy.sh
 
 # Deploy + restart QS
-plans/project/somewm-shell/deploy.sh && kill $(pgrep -f 'qs -c somewm')
+./deploy.sh && kill $(pgrep -f 'qs -c somewm')
 
 # Deploy + clear cache + restart
-plans/project/somewm-shell/deploy.sh && rm -rf ~/.cache/quickshell/qmlcache/ && kill $(pgrep -f 'qs -c somewm')
+./deploy.sh && rm -rf ~/.cache/quickshell/qmlcache/ && kill $(pgrep -f 'qs -c somewm')
 
 # Run tests
-bash plans/project/somewm-shell/tests/test-all.sh
+bash tests/test-all.sh
 
 # Check current theme
 cat ~/.config/somewm/themes/default/theme.json
 
 # Export theme from Lua to JSON
-bash plans/project/somewm-shell/theme-export.sh
+bash theme-export.sh
 
 # IPC test
 qs ipc -c somewm call somewm-shell:panels toggle dashboard

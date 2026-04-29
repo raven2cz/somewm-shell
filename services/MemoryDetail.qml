@@ -11,7 +11,7 @@ pragma Singleton
 //
 // Plus a derived somewm RSS/PSS from /proc/<somewm_pid>/smaps_rollup
 // (values are not exposed by the Lua API; we get them here the same way
-// plans/scripts/somewm-memory-snapshot.sh does).
+// somewm-memory-snapshot.sh does — see somewm fork's plans/scripts/).
 //
 // Trend ring: three parallel 60-sample arrays (5 min × 5 s), plain QML
 // arrays handed to components/Graph.qml via addPoint(). In-memory only.
@@ -571,16 +571,28 @@ Singleton {
         // sh -c with positional args — the script path is passed as "$1" out
         // of the shell's parse path, so there is no interpolation / injection
         // risk even if HOME ever contained metacharacters.
-        var script = home + "/git/github/somewm/plans/scripts/somewm-memory-snapshot.sh"
+        // SOMEWM_FORK_PATH lets users point at a different fork checkout;
+        // default is the conventional ~/git/github/somewm. If the script is
+        // missing, sh -c "timeout ... \"$1\"" returns 127 silently.
+        var fork = Quickshell.env("SOMEWM_FORK_PATH") || (home + "/git/github/somewm")
+        var script = fork + "/plans/scripts/somewm-memory-snapshot.sh"
         Quickshell.execDetached(["sh", "-c",
             "timeout 10 \"$1\" --tsv 2>/dev/null | wl-copy",
             "copySnapshot", script])
     }
 
     function openBaseline() {
-        Quickshell.execDetached(["xdg-open",
-            Quickshell.env("HOME") +
-            "/git/github/somewm/plans/docs/memory-baseline.md"])
+        var home = Quickshell.env("HOME") || ""
+        if (home === "") { console.error("MemoryDetail.openBaseline: HOME unset"); return }
+        // sh -c performs an existence check before xdg-open so a missing
+        // fork checkout doesn't pop a "file not found" dialog. Logged to
+        // stderr so users see why nothing happened.
+        var fork = Quickshell.env("SOMEWM_FORK_PATH") || (home + "/git/github/somewm")
+        var doc = fork + "/plans/docs/memory-baseline.md"
+        Quickshell.execDetached(["sh", "-c",
+            "if [ -f \"$1\" ]; then xdg-open \"$1\"; " +
+            "else echo \"openBaseline: $1 not found (set SOMEWM_FORK_PATH if your fork lives elsewhere)\" >&2; fi",
+            "openBaseline", doc])
     }
 
     function refresh() {

@@ -131,13 +131,14 @@ See [GUIDE.md](GUIDE.md) for the full architecture.
 
 ## Contributing
 
-1. Edit QML under `plans/project/somewm-shell/` (or your fork).
+1. Edit QML under this repo (or your fork).
 2. Add a header (see [STYLE.md](STYLE.md)).
 3. Extend `IPC.md` if you add or change an IPC surface.
 4. Run tests and the header lint:
    ```bash
    bash tests/test-all.sh
-   bash ../../scripts/check-headers.sh
+   # check-headers.sh lives in the somewm fork (raven2cz/somewm):
+   bash "${SOMEWM_FORK_PATH:-$HOME/git/github/somewm}/plans/scripts/check-headers.sh"
    ```
 5. Commit with a conventional message (`feat:`, `fix:`, `refactor:`,
    `docs:`).

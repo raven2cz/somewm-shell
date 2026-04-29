@@ -39,12 +39,13 @@ widget (`modules/sidebar/NotifHistory.qml`) and dashboard tab
 (`modules/dashboard/NotificationsTab.qml`) are display-only — they bind to
 `Core.NotifStore.notifications` and call its functions.
 
-Typical call sites in Lua:
-- `plans/project/somewm-one/fishlive/config/keybindings.lua` — panel toggles, OSD
-- `plans/project/somewm-one/fishlive/config/shell_ipc.lua` — compositor
-  invalidate + setScreen on tag/screen signals
-- `plans/project/somewm-one/fishlive/components/notifications.lua` —
-  notifications.refresh after each new naughty entry
+Typical call sites in Lua (in the [somewm-one](https://github.com/raven2cz/somewm-one)
+config repo — checkout path overridable via `SOMEWM_ONE_PATH`):
+- `fishlive/config/keybindings.lua` — panel toggles, OSD
+- `fishlive/config/shell_ipc.lua` — compositor invalidate + setScreen on
+  tag/screen signals
+- `fishlive/components/notifications.lua` — notifications.refresh after each
+  new naughty entry
 
 ## Shell → Lua: `awesome._*` globals
 

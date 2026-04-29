@@ -382,7 +382,7 @@ fi
 section "8. Theme Export Script Validation"
 # ============================================================
 
-theme_export="/home/box/git/github/somewm/plans/project/somewm-shell/theme-export.sh"
+theme_export="$SHELL_DIR/theme-export.sh"
 if [[ -f "$theme_export" ]]; then
     pass "theme-export.sh exists"
 
@@ -580,7 +580,7 @@ fi
 section "16. rc.lua Shell Keybindings"
 # ============================================================
 
-RC_LUA="/home/box/git/github/somewm/plans/project/somewm-one/rc.lua"
+RC_LUA="${SOMEWM_ONE_PATH:-$HOME/git/github/somewm-one}/rc.lua"
 # grep_rc <pattern> — search rc.lua + extracted fishlive modules (post-refactor
 # layout: commit 9160922 moved keybindings/shell_ipc/notifications out of rc.lua
 # into fishlive/config/*.lua and fishlive/components/*.lua).
@@ -649,7 +649,8 @@ if [[ -f "$RC_LUA" ]]; then
         fail "rc.lua" "missing shell autostart (qs -c somewm)"
     fi
 else
-    fail "rc.lua" "file not found at $RC_LUA"
+    echo "  ⊘ skipping section 16 — somewm-one not present at $RC_LUA"
+    echo "    (set SOMEWM_ONE_PATH to override; this section is for fork co-checkout only)"
 fi
 
 # ============================================================
@@ -1484,8 +1485,13 @@ section "32. Config Module Init Convention (.setup)"
 # All four signal-connecting config modules must expose M.setup(),
 # guard with _initialized for idempotency, and avoid top-level
 # signal.connect_signal calls (load order is a property of rc.lua).
-ONE_DIR="/home/box/git/github/somewm/plans/project/somewm-one"
+ONE_DIR="${SOMEWM_ONE_PATH:-$HOME/git/github/somewm-one}"
 CFG_DIR="$ONE_DIR/fishlive/config"
+
+if [[ ! -d "$ONE_DIR" ]]; then
+    echo "  ⊘ skipping section 32 — somewm-one not present at $ONE_DIR"
+    echo "    (set SOMEWM_ONE_PATH to override; this section is for fork co-checkout only)"
+else
 
 for mod in rules titlebars client_fixes shell_ipc; do
     f="$CFG_DIR/$mod.lua"
@@ -1610,6 +1616,8 @@ for mod in rules titlebars client_fixes shell_ipc; do
         fail "$mod.lua" "setup() not idempotent — second call re-registers signals"
     fi
 done
+
+fi  # end "if [[ -d "$ONE_DIR" ]]" guard for section 32
 
 # ============================================================
 section "33. NotifStore Deduplication"

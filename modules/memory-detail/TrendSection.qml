@@ -194,7 +194,8 @@ Item {
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
             text: "Δ, min, max anchored to this panel open. Use " +
-                  "plans/scripts/somewm-memory-trend.sh for long traces."
+                  "somewm-memory-trend.sh (in the somewm fork's plans/scripts/) " +
+                  "for long traces."
             font.family: Core.Theme.fontUI
             font.pixelSize: Core.Theme.fontSize.xs
             color: Core.Theme.fgMuted
