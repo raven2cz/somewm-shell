@@ -11,17 +11,30 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TARGET="$HOME/.config/quickshell/somewm"
 
+# Repo-management files that don't belong in the deployed config.
+# *.default.json is excluded too — those are seeded below only if the
+# target file doesn't exist, so the user's in-app edits are preserved.
+EXCLUDES=(
+    --exclude 'deploy.sh'
+    --exclude '*.default.json'
+    --exclude '.git'
+    --exclude '.gitignore'
+    --exclude '.github'
+    --exclude 'LICENSE'
+    --exclude 'CLAUDE.md'
+)
+
 if [[ "${1:-}" == "--dry-run" ]]; then
     echo "Dry run — would sync:"
-    rsync -av --exclude 'deploy.sh' --exclude '*.default.json' --dry-run "$SCRIPT_DIR/" "$TARGET/"
+    rsync -av "${EXCLUDES[@]}" --dry-run "$SCRIPT_DIR/" "$TARGET/"
     exit 0
 fi
 
 # Create target directory
 mkdir -p "$TARGET"
 
-# Sync (exclude deploy.sh and *.default.json — those are seeded below)
-rsync -av --exclude 'deploy.sh' --exclude '*.default.json' "$SCRIPT_DIR/" "$TARGET/"
+# Sync (excludes are shared with the dry-run path above)
+rsync -av "${EXCLUDES[@]}" "$SCRIPT_DIR/" "$TARGET/"
 
 # Seed *.default.json → *.json only if target doesn't exist (preserve user edits).
 # Applies to config.json, collage-layouts.json, and any future seedable defaults.
