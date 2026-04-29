@@ -1,6 +1,6 @@
 # Backdrop Blur for Layer Surfaces (SceneFX)
 
-**Status:** Reverted (2026-04-04) — caused stuttering on NVIDIA RTX 5070 Ti
+**Status:** Reverted (2026-04-04) - caused stuttering on NVIDIA RTX 5070 Ti
 **Reason:** Performance issues, blur re-applied on every wlr surface commit
 
 ## Overview
@@ -8,12 +8,12 @@
 Working implementation of SceneFX backdrop blur for layer-shell surfaces
 (Quickshell panels). Blur was auto-enabled for all `somewm-shell:*` namespaces.
 
-Quickshell does NOT have native backdrop blur — its panels are plain Wayland
+Quickshell does NOT have native backdrop blur - its panels are plain Wayland
 layer-shell surfaces. Blur must come from the compositor side via SceneFX.
 
 ## Files Modified (4 files, ~80 lines)
 
-### 1. `somewm_types.h` — LayerSurface struct
+### 1. `somewm_types.h`: LayerSurface struct
 
 Added `bool backdrop_blur` field:
 
@@ -30,7 +30,7 @@ typedef struct LayerSurface {
 } LayerSurface;
 ```
 
-### 2. `objects/layer_surface.c` — Blur functions + Lua property
+### 2. `objects/layer_surface.c`: Blur functions + Lua property
 
 Three additions after the opacity code (~line 134):
 
@@ -110,13 +110,13 @@ luaA_class_add_property(&layer_surface_class, "backdrop_blur",
                         (lua_class_propfunc_t) luaA_layer_surface_set_backdrop_blur);
 ```
 
-### 3. `objects/layer_surface.h` — Declaration
+### 3. `objects/layer_surface.h`: Declaration
 
 ```c
 void layer_surface_apply_backdrop_blur(layer_surface_t *ls);
 ```
 
-### 4. `somewm.c` — Two changes
+### 4. `somewm.c`: Two changes
 
 **a) Auto-enable in `createlayersurface()` (~line 1820):**
 
@@ -153,14 +153,14 @@ The blur was re-applied on **every single surface commit** via
 entire scene tree recursively calling `wlr_scene_buffer_set_backdrop_blur()`.
 
 Possible optimizations for next attempt:
-1. **Skip redundant re-apply** — only call when blur state actually changes
+1. **Skip redundant re-apply**: only call when blur state actually changes
    (check if buffers already have blur set before re-applying)
-2. **Debounce** — don't re-apply on every commit, use a dirty flag + timer
-3. **Apply once at map time** — if wlroots doesn't actually reset blur on
+2. **Debounce**: don't re-apply on every commit, use a dirty flag + timer
+3. **Apply once at map time**: if wlroots doesn't actually reset blur on
    commit (unlike opacity), the re-apply loop may be unnecessary
-4. **SceneFX blur_data tuning** — adjust blur radius/passes for performance
+4. **SceneFX blur_data tuning**: adjust blur radius/passes for performance
    (`wlr_scene_set_blur_data()` in somewm.c setup)
-5. **Test without NVIDIA** — the stutter might be NVIDIA-specific (GPU reset,
+5. **Test without NVIDIA**: the stutter might be NVIDIA-specific (GPU reset,
    DRM format issues, Vulkan allocator overhead)
 
 ## Build Verification

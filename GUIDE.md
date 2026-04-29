@@ -6,7 +6,7 @@ A professional desktop shell for somewm built on **Quickshell (Qt6/QML)**.
 It provides overlay panels (dashboard with tabbed interface, dock, control panel,
 weather, wallpaper picker, collage viewer, OSD) as Wayland layer-shell surfaces.
 It is an **overlay complement** to the existing wibar and Lua widgets in somewm-one
-— it does not replace them.
+- it does not replace them.
 
 No server, no HTTP, no WebSocket. Everything runs natively in the Quickshell process.
 
@@ -34,7 +34,7 @@ somewm-shell (Quickshell / Qt6 QML)
     └── Each module = PanelWindow + Variants (per-screen instances)
 ```
 
-### Dashboard Architecture (v2 — Caelestia-inspired)
+### Dashboard Architecture (v2 - Caelestia-inspired)
 
 The dashboard is a **bottom-slide tabbed panel** that replaces the old
 separate dashboard, sidebar, and media panels. It uses MD3 BezierSpline
@@ -53,11 +53,11 @@ Dashboard (bottom-slide, full-width - margins)
 
 ### Notification system (single-owner NotifStore)
 
-All notification UI binds to one QML singleton — `core/NotifStore.qml` —
+All notification UI binds to one QML singleton `core/NotifStore.qml`,
 which owns the `somewm-shell:notifications` IpcHandler and the full IPC
 surface (`refresh`, `dismissOne`, `clearAll`, `copyToClipboard`). The
 sidebar widget (`modules/sidebar/NotifHistory.qml`) and the dashboard tab
-(`modules/dashboard/NotificationsTab.qml`) are display-only — they bind to
+(`modules/dashboard/NotificationsTab.qml`) are display-only - they bind to
 `Core.NotifStore.notifications` and call its functions.
 
 ```
@@ -70,15 +70,15 @@ core/NotifStore.qml  (singleton, single IPC owner)
 ```
 
 `shell.qml` calls `Core.NotifStore.refresh()` in `Component.onCompleted`
-to force singleton instantiation at shell startup — otherwise the
+to force singleton instantiation at shell startup - otherwise the
 `IpcHandler` is lazy and `qs ipc call somewm-shell:notifications refresh`
 fails with *"Target not found"* until a consumer panel opens.
 
 ### Lazy polling
 
 All heavyweight data sources are gated by tab visibility:
-- `SystemStats.perfTabActive` — GPU/temp/disk only poll when Performance tab is visible
-- `CavaService.mediaTabActive` — Cava process only runs when Media tab is visible
+- `SystemStats.perfTabActive`: GPU/temp/disk only poll when Performance tab is visible
+- `CavaService.mediaTabActive`: Cava process only runs when Media tab is visible
 - Base CPU/Memory polling stays always-on (wibar integration needs it)
 
 ### Dock Architecture
@@ -102,7 +102,7 @@ Dock (bottom-left, border strip + ShapePath)
 it gracefully falls back to rich info cards with focus status.
 
 **Data source:** `DockApps` singleton uses `ToplevelManager` from `Quickshell.Wayland`
-— direct Wayland protocol, no Lua IPC, instant reactivity.
+- direct Wayland protocol, no Lua IPC, instant reactivity.
 
 **Pin persistence:** Pinned apps saved to `~/.config/quickshell/somewm/dock-pins.json`.
 Right-click any icon to toggle pin. Default pins: alacritty, firefox-developer-edition,
@@ -136,25 +136,25 @@ HotEdges (3 per-zone PanelWindows, focused screen only)
 ```
 
 **Key design decisions:**
-- **Per-zone PanelWindows** — each zone is a separate Wayland surface with its own
+- **Per-zone PanelWindows**: each zone is a separate Wayland surface with its own
   `mask: Region { item: mouseArea }`. Avoids pointer-steal issues between overlapping surfaces.
-- **Center declared FIRST** — in wlr-layer-shell, surfaces on the same layer stack by
+- **Center declared FIRST**: in wlr-layer-shell, surfaces on the same layer stack by
   creation order. Center is created first (bottom), corners after (on top) so corners
   always win pointer events in overlap areas.
-- **Focused screen only** — `visible: isActiveScreen` prevents ghost zones on inactive
+- **Focused screen only**: `visible: isActiveScreen` prevents ghost zones on inactive
   screens from stealing pointer events at shared screen edges (multi-monitor fix).
-- **Dead pixel workaround** — `margins.bottom: -1` extends surface 1px past screen edge
+- **Dead pixel workaround**: `margins.bottom: -1` extends surface 1px past screen edge
   so cursor at absolute bottom pixel still triggers `wl_pointer.enter`.
-- **Timer-based activation** — 250ms (corners) / 300ms (center) delay prevents accidental
+- **Timer-based activation**: 250ms (corners) / 300ms (center) delay prevents accidental
   triggers when cursor passes through.
 
 ### Panel Architecture Pattern (Border Strip + ShapePath)
 
 Dashboard, Dock, and ControlPanel share the same visual pattern:
 
-1. **Border strip** — thin bar at screen bottom edge, animates first (350ms)
-2. **ShapePath background** — rounded shape grows from strip (700ms, sequenced after strip)
-3. **Content** — inside the shape, clips during animation
+1. **Border strip**: thin bar at screen bottom edge, animates first (350ms)
+2. **ShapePath background**: rounded shape grows from strip (700ms, sequenced after strip)
+3. **Content**: inside the shape, clips during animation
 
 **Sequenced animation flow:**
 ```
@@ -176,7 +176,7 @@ panels enter "hoverMode" and auto-close on mouse exit (400ms timer).
 
 ### Wayland Input Mask & Hover Architecture
 
-**CRITICAL LESSON LEARNED** — Wayland compositors only deliver input events to
+**CRITICAL LESSON LEARNED**: Wayland compositors only deliver input events to
 areas defined by the panel's `mask: Region { item: clickTarget }`. This creates
 unique challenges for hover-driven UIs:
 
@@ -184,7 +184,7 @@ unique challenges for hover-driven UIs:
 the compositor alternately starts/stops sending hover events → rapid ENTERED/EXITED
 cycling. This happens when popup visibility is bound to hover state.
 
-**Solution — Unified clickTarget architecture:**
+**Solution: Unified clickTarget architecture:**
 
 ```qml
 PanelWindow {
@@ -239,27 +239,27 @@ PanelWindow {
 ```
 
 **Key rules:**
-1. **Unified z-order** — wrapper and popup both inside `clickTarget` so hover
+1. **Unified z-order**: wrapper and popup both inside `clickTarget` so hover
    events flow correctly through the z-tree
-2. **Permissive visibility** — popup stays visible (in mask) during close timer,
+2. **Permissive visibility**: popup stays visible (in mask) during close timer,
    preventing mask toggle → flicker loop
-3. **HoverHandler over MouseArea** — `HoverHandler` doesn't compete with child
+3. **HoverHandler over MouseArea**: `HoverHandler` doesn't compete with child
    `MouseArea` elements for hover events (critical for cards with close buttons)
-4. **Visual layer at z:-1** — ShapePath + shadows render behind `clickTarget`,
+4. **Visual layer at z:-1**: ShapePath + shadows render behind `clickTarget`,
    never intercepting events
-5. **Guarded close timer** — `onTriggered` re-checks hover state before closing
+5. **Guarded close timer**: `onTriggered` re-checks hover state before closing
 
 ### Panel Routing & Exclusivity
 
 `Panels.qml` manages panel state with these rules:
 
 - **Exclusive group:** `["dashboard", "wallpapers", "collage", "weather", "ai-chat"]`
-  — opening one closes all others in the group
+  - opening one closes all others in the group
 - **Non-exclusive:** `dock` and `controlpanel` can coexist with exclusive panels
 - **Tab routing:** Legacy panel names are routed to dashboard tabs:
   - `"sidebar"` / `"notifications"` → Dashboard tab 0 / 3
   - `"media"` / `"performance"` → Dashboard tab 2 / 1
-- **IPC target:** `somewm-shell:panels` — all functions callable from rc.lua
+- **IPC target:** `somewm-shell:panels` - all functions callable from rc.lua
 
 ### Theme Chain
 
@@ -286,7 +286,7 @@ Theme.qml auto-reloads via FileView
 
 ### Data Flow: How Widgets Get Updated
 
-There are 4 patterns — **no polling loops needed for most data**:
+There are 4 patterns - **no polling loops needed for most data**:
 
 | Pattern | When to use | Example |
 |---------|------------|---------|
@@ -301,7 +301,7 @@ rc.lua immediately calls `awful.spawn("qs ipc call somewm-shell:compositor inval
 The shell's `Compositor.qml` has an `IpcHandler` that receives this, debounces rapid
 events (50ms window), then runs `somewm-client eval` to fetch fresh state.
 
-**Why no server?** QML property bindings are reactive — when `SystemStats.cpuPercent`
+**Why no server?** QML property bindings are reactive - when `SystemStats.cpuPercent`
 changes, every UI element bound to it re-renders automatically via the Qt scene graph.
 No DOM, no virtual DOM, no diffing.
 
@@ -404,9 +404,9 @@ No DOM, no virtual DOM, no diffing.
 
 ## Services Reference
 
-### DockApps.qml — Dock Application Manager
+### DockApps.qml: Dock Application Manager
 
-**Data source:** `ToplevelManager` from `Quickshell.Wayland` — direct Wayland
+**Data source:** `ToplevelManager` from `Quickshell.Wayland` - direct Wayland
 foreign-toplevel-management protocol. No Lua IPC overhead.
 
 **Model:** `ListModel`-based `dockItems` with in-place updates. This prevents the
@@ -420,14 +420,14 @@ Each item in the model:
 
 **Icon resolution cascade** (6 steps):
 1. Hardcoded overrides (case fixes: alacritty→Alacritty, code→visual-studio-code, etc.)
-2. `DesktopEntries.byId(appId)` — exact desktop entry match
-3. `DesktopEntries.heuristicLookup(appId)` — fuzzy match
-4. `Quickshell.iconPath(appId)` — direct XDG icon theme lookup
+2. `DesktopEntries.byId(appId)` - exact desktop entry match
+3. `DesktopEntries.heuristicLookup(appId)` - fuzzy match
+4. `Quickshell.iconPath(appId)` - direct XDG icon theme lookup
 5. Normalize: strip reverse-domain prefix, lowercase, dots-to-hyphens
 6. `steam_app_NNN` → `steam_icon_NNN` regex
 7. Fallback: `"application-x-executable"` (for IconImage, NOT Material Symbol)
 
-**No icon cache** — cascade is cheap after `DesktopEntries` loads. Avoids stale
+**No icon cache**: cascade is cheap after `DesktopEntries` loads. Avoids stale
 entries. Hooks `DesktopEntries.onApplicationsChanged` to re-resolve on startup.
 
 **Pin persistence:** Reads/writes `~/.config/quickshell/somewm/dock-pins.json`
@@ -462,7 +462,7 @@ DockApps.resolveIcon(appId)  // Icon name for Quickshell.iconPath()
 
 ## New Components (v2)
 
-### ArcGauge — 270° arc progress
+### ArcGauge: 270° arc progress
 
 ```qml
 Components.ArcGauge {
@@ -479,7 +479,7 @@ Components.ArcGauge {
 Shape-based with `PathAngleArc` (not Canvas). 270° sweep, animated with
 600ms expressiveDefaultSpatial BezierSpline curve. Glow dot at progress endpoint.
 
-### ConcaveShape — concave top edge
+### ConcaveShape: concave top edge
 
 ```qml
 Components.ConcaveShape {
@@ -491,7 +491,7 @@ Components.ConcaveShape {
 Creates inward curve using `PathArc` with `Counterclockwise` direction.
 Used as dashboard panel background top edge.
 
-### TabBar — MD3 animated tabs
+### TabBar: MD3 animated tabs
 
 ```qml
 Components.TabBar {
@@ -508,7 +508,7 @@ Components.TabBar {
 
 3px animated indicator pill, emphasized BezierSpline. Mouse wheel tab cycling.
 
-### FrequencyVisualizer — radial Cava bars
+### FrequencyVisualizer: radial Cava bars
 
 ```qml
 Components.FrequencyVisualizer {
@@ -521,7 +521,7 @@ Components.FrequencyVisualizer {
 Repeater with radially positioned bars. 80ms animation for audio reactivity.
 Idle pulse animation when no audio data.
 
-### WallpaperCarousel — isometric skew
+### WallpaperCarousel: isometric skew
 
 ```qml
 Components.WallpaperCarousel {
@@ -569,7 +569,7 @@ Then restart QS. Without clearing, QS may use stale cached versions.
 
 somewm's rc.lua launches QS with `awful.spawn.once("qs -c somewm -n -d")`. This means:
 - Killing QS with `kill`/`pkill` triggers respawn by somewm
-- For quick restarts: just `kill $(pgrep -f 'qs -c somewm')` — it auto-respawns
+- For quick restarts: just `kill $(pgrep -f 'qs -c somewm')` - it auto-respawns
 - For a clean restart with cache clear:
   ```bash
   rm -rf ~/.cache/quickshell/qmlcache/ && kill $(pgrep -f 'qs -c somewm')
@@ -616,8 +616,8 @@ grep "DOCK" /tmp/qs-shell.log
 | `Super+Shift+W` | Wallpaper picker (carousel) | Exclusive |
 | `Super+Shift+O` | Collage viewer | Exclusive |
 | `Super+Shift+A` | AI chat | Exclusive |
-| `Super+C` | Close ALL panels | — |
-| `Escape` | Close current panel | — |
+| `Super+C` | Close ALL panels | - |
+| `Escape` | Close current panel | - |
 
 **Exclusive** panels close each other (only one open at a time).
 **Non-exclusive** panels (dock, controlpanel) can coexist with exclusive panels.
@@ -702,12 +702,12 @@ All colors come from `theme.json` (exported from `theme.lua` via `theme-export.s
 | `accentDim` | `#c49a3a` | Darker accent variant |
 | `urgent` | `#e06c75` | Errors, DND active |
 | `green` | `#98c379` | Success states |
-| `glass1` | — | Glass card background |
-| `glassBorder` | — | Glass card border |
-| `glassAccentHover` | — | Accent hover highlight |
-| `surfaceContainer` | — | Card backgrounds |
-| `surfaceContainerHigh` | — | Hover state card backgrounds |
-| `accentBorder` | — | Active/hover borders |
+| `glass1` | - | Glass card background |
+| `glassBorder` | - | Glass card border |
+| `glassAccentHover` | - | Accent hover highlight |
+| `surfaceContainer` | - | Card backgrounds |
+| `surfaceContainerHigh` | - | Hover state card backgrounds |
+| `accentBorder` | - | Active/hover borders |
 
 ### Widget colors (matching wibar exactly)
 
@@ -748,19 +748,19 @@ wp.get_overrides_json()                    -- JSON override map
 
 ### Shell integration (`Wallpapers.qml`)
 
-- `setWallpaper(path)` — sets override for currently selected tag
-- `setWallpaperForTag(tag, path)` — sets for specific tag
-- `applyTheme` toggle — when ON, runs `theme-export.sh` after wallpaper change
-- `clearOverride(tag)` — reverts to theme default
+- `setWallpaper(path)`: sets override for currently selected tag
+- `setWallpaperForTag(tag, path)`: sets for specific tag
+- `applyTheme` toggle: when ON, runs `theme-export.sh` after wallpaper change
+- `clearOverride(tag)`: reverts to theme default
 
 ### Wallpaper picker (WallpaperPanel.qml)
 
 Two views:
-- **Carousel** (default) — isometric skew carousel (ilyamiro-inspired)
-- **Grid** — traditional thumbnail grid (toggle via view button)
+- **Carousel** (default): isometric skew carousel (ilyamiro-inspired)
+- **Grid**: traditional thumbnail grid (toggle via view button)
 
 Features:
-- "Apply Theme" toggle pill — controls whether theme colors update with wallpaper
+- "Apply Theme" toggle pill - controls whether theme colors update with wallpaper
 - Apply button + current wallpaper indicator
 - Preview overlay (right-click in grid view)
 
@@ -859,25 +859,25 @@ See existing modules for reference. Remember:
 
 ### DO
 
-- **Color layering** for depth — `surfaceBase → surfaceContainer → surfaceContainerHigh`
+- **Color layering** for depth: `surfaceBase → surfaceContainer → surfaceContainerHigh`
 - **MD3 BezierSpline curves** for premium animations (dashboard, carousel, gauges)
-- **Lazy polling** — NEVER poll data when panel/tab is not visible
-- **Flat colors** — single accent color on interactive elements, neutral elsewhere
-- **Minimal borders** — 1px at 6% opacity, only for structure
-- **dpiScale on all sizes** — `Math.round(N * Core.Theme.dpiScale)` for hardcoded px values
-- **Smooth animations** — 250-500ms with eased curves, never linear
-- **Glass cards** for popups/overlays — `glass1` background + `glassBorder`
-- **Unified clickTarget** for Wayland mask — all interactive children in one tree
+- **Lazy polling**: NEVER poll data when panel/tab is not visible
+- **Flat colors**: single accent color on interactive elements, neutral elsewhere
+- **Minimal borders**: 1px at 6% opacity, only for structure
+- **dpiScale on all sizes**: `Math.round(N * Core.Theme.dpiScale)` for hardcoded px values
+- **Smooth animations**: 250-500ms with eased curves, never linear
+- **Glass cards** for popups/overlays: `glass1` background + `glassBorder`
+- **Unified clickTarget** for Wayland mask: all interactive children in one tree
 
 ### DO NOT
 
-- ~~Drop shadows~~ — use color layering instead (exception: dock preview, control panel)
-- ~~Background polling~~ — gate with visibility flags (perfTabActive, mediaTabActive)
-- ~~Gradients on buttons~~ — flat color only
-- ~~Glow effects~~ — never (except subtle arc gauge endpoint dot and dock hover glow)
-- ~~Hardcoded pixel sizes~~ — always multiply by dpiScale
-- ~~MouseArea for hover tracking on containers with interactive children~~ — use HoverHandler
-- ~~Visibility bound directly to hover state~~ — use permissive visibility pattern
+- ~~Drop shadows~~ - use color layering instead (exception: dock preview, control panel)
+- ~~Background polling~~ - gate with visibility flags (perfTabActive, mediaTabActive)
+- ~~Gradients on buttons~~ - flat color only
+- ~~Glow effects~~ - never (except subtle arc gauge endpoint dot and dock hover glow)
+- ~~Hardcoded pixel sizes~~ - always multiply by dpiScale
+- ~~MouseArea for hover tracking on containers with interactive children~~ - use HoverHandler
+- ~~Visibility bound directly to hover state~~ - use permissive visibility pattern
 
 ## Dock-Specific Implementation Notes
 
@@ -886,9 +886,9 @@ See existing modules for reference. Remember:
 The Dock uses QML `component` declarations for delegate types to keep everything
 in a single file (avoiding import complexity for tightly-coupled elements):
 
-- **`DockSeparator`** — thin vertical line between pinned and running sections
-- **`DockAppButton`** — icon + activity dots + hover zoom + glow + click handlers
-- **`PreviewCard`** — window info card with icon, title, close button, focus status,
+- **`DockSeparator`**: thin vertical line between pinned and running sections
+- **`DockAppButton`**: icon + activity dots + hover zoom + glow + click handlers
+- **`PreviewCard`**: window info card with icon, title, close button, focus status,
   optional ScreencopyView live thumbnail
 
 ### DockAppButton Interactions
@@ -910,7 +910,7 @@ in a single file (avoiding import complexity for tightly-coupled elements):
 - Shows one PreviewCard per toplevel window
 - Glass background with shadow, scale+opacity entry animation
 - Cards have staggered entry animation (scale 0.85→1.0, OutBack)
-- Close timer: 400ms after mouse exits (guarded — re-checks hover)
+- Close timer: 400ms after mouse exits (guarded - re-checks hover)
 - Click card → activate window + close dock
 - Close button on each card → close that window
 
@@ -950,9 +950,9 @@ qs ipc -c somewm call somewm-shell:panels toggle dashboard
 
 ## Further reading
 
-- [STYLE.md](STYLE.md) — QML header templates, module-init conventions, IPC rules
-- [IPC.md](IPC.md) — full Lua ↔ Shell IPC catalogue (handlers + globals)
-- [../somewm-one/GUIDE.md](../somewm-one/GUIDE.md) — the Lua side
+- [STYLE.md](STYLE.md) - QML header templates, module-init conventions, IPC rules
+- [IPC.md](IPC.md) - full Lua ↔ Shell IPC catalogue (handlers + globals)
+- [../somewm-one/GUIDE.md](../somewm-one/GUIDE.md) - the Lua side
   (rc.lua orchestration, fishlive framework, `.setup()` convention)
-- [../somewm-one/STYLE.md](../somewm-one/STYLE.md) — Lua headers and init rules
+- [../somewm-one/STYLE.md](../somewm-one/STYLE.md) - Lua headers and init rules
 

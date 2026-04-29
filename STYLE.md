@@ -1,4 +1,4 @@
-# Style Guide — somewm-shell
+# Style Guide: somewm-shell
 
 Code conventions for the somewm-shell Quickshell/QML desktop shell. New
 files stay consistent by following this document.
@@ -40,21 +40,21 @@ import QtQuick
 
 ### Scope
 
-- **`services/*.qml`** — every service must have a header. Include IPC
+- **`services/*.qml`**: every service must have a header. Include IPC
   handler target, polling model (timer / event-driven / reactive), and key
   public properties.
-- **`components/*.qml`** — every reusable component must have a header +
+- **`components/*.qml`**: every reusable component must have a header +
   short prose doc on public properties (e.g. `hovered`, `elevated`,
   `accentTint`).
-- **Module roots** (e.g. `modules/sidebar/Sidebar.qml`) — must have a
+- **Module roots** (e.g. `modules/sidebar/Sidebar.qml`): must have a
   header. The tabs and sub-components under a module root may omit the
   header and inherit context.
-- **Tests** and `deploy.sh` already carry their own shebang/preamble — no
+- **Tests** and `deploy.sh` already carry their own shebang/preamble - no
   QML header applies.
 
 ## Module init conventions
 
-- **Services are QML singletons** — no explicit setup, lazy-loaded via
+- **Services are QML singletons**: no explicit setup, lazy-loaded via
   `Core.<Name>` or `Services.<Name>`. If a singleton needs to be reachable
   before any consumer imports it, its consumer (typically `shell.qml`) must
   call a method on it from `Component.onCompleted` to force instantiation.
@@ -73,7 +73,7 @@ import QtQuick
   `Math.round(N * Core.Theme.dpiScale)`. This includes widths, heights,
   spacing, radii and font sizes.
 - **Theme tokens only.** All colors come from `Core.Theme` (`accent`, `fgMain`,
-  `surfaceContainer`, …). No inline hex values — if a color is missing from
+  `surfaceContainer`, …). No inline hex values - if a color is missing from
   the theme, add it to `theme.json` and `Theme.qml` rather than hard-coding.
   Widget-category colors (`widgetCpu`, `widgetGpu`, …) must match the
   compositor's wibar palette exactly for cross-surface consistency.

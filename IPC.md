@@ -36,15 +36,15 @@ Passing an empty `screenName` falls back to the active-screen heuristic.
 Notifications use a single-owner pattern: `core/NotifStore.qml` owns the
 `IpcHandler` and the IPC surface (fetch, dismiss, clear, copy). The sidebar
 widget (`modules/sidebar/NotifHistory.qml`) and dashboard tab
-(`modules/dashboard/NotificationsTab.qml`) are display-only — they bind to
+(`modules/dashboard/NotificationsTab.qml`) are display-only - they bind to
 `Core.NotifStore.notifications` and call its functions.
 
 Typical call sites in Lua (in the [somewm-one](https://github.com/raven2cz/somewm-one)
-config repo — checkout path overridable via `SOMEWM_ONE_PATH`):
-- `fishlive/config/keybindings.lua` — panel toggles, OSD
-- `fishlive/config/shell_ipc.lua` — compositor invalidate + setScreen on
+config repo - checkout path overridable via `SOMEWM_ONE_PATH`):
+- `fishlive/config/keybindings.lua`: panel toggles, OSD
+- `fishlive/config/shell_ipc.lua`: compositor invalidate + setScreen on
   tag/screen signals
-- `fishlive/components/notifications.lua` — notifications.refresh after each
+- `fishlive/components/notifications.lua`: notifications.refresh after each
   new naughty entry
 
 ## Shell → Lua: `awesome._*` globals
@@ -61,13 +61,13 @@ via `["somewm-client", "eval", "return awesome._X"]`.
 
 **New Lua → Shell method:**
 1. Pick the right target module (or add a new `somewm-shell:<name>` only if the
-   scope is genuinely new — don't splinter).
+   scope is genuinely new - don't splinter).
 2. Add the method to the existing `IpcHandler` block in the owner file.
 3. Call from Lua with `awful.spawn("qs ipc -c somewm call somewm-shell:X y arg1")`.
 4. Update this document.
 
 **New shell → Lua global:**
-1. Namespace it `awesome._<name>` — never `_G.name`, never `foo` global.
+1. Namespace it `awesome._<name>` - never `_G.name`, never `foo` global.
 2. Initialize it defensively on the Lua side
    (`awesome._X = awesome._X or <default>`) so a crashed shell that restarts
    doesn't wedge the compositor.
