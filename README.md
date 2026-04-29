@@ -1,6 +1,6 @@
 # somewm-shell
 
-> A modern desktop shell for [**somewm**](https://github.com/raven2cz/somewm),
+> A modern desktop shell for [**somewm**](https://github.com/trip-zip/somewm),
 > built on [Quickshell](https://quickshell.outfoxxed.me/) (Qt6/QML).
 >
 > Part of the *AwesomeWM-on-Wayland, at last* stack.
@@ -17,7 +17,7 @@
 ## What is this?
 
 `somewm-shell` is an overlay desktop shell for the
-[somewm](https://github.com/raven2cz/somewm) Wayland compositor. It is an
+[somewm](https://github.com/trip-zip/somewm) Wayland compositor. It is an
 *overlay complement* to the wibar and Lua widgets shipped by
 [somewm-one](https://github.com/raven2cz/somewm-one) — it does not replace
 them.
@@ -49,7 +49,7 @@ HTTP, no WebSocket. State flows over two well-defined channels:
 ## Requirements
 
 - [Quickshell](https://quickshell.outfoxxed.me/) (main or latest release)
-- [`somewm`](https://github.com/raven2cz/somewm) compositor
+- [`somewm`](https://github.com/trip-zip/somewm) compositor
 - [`somewm-one`](https://github.com/raven2cz/somewm-one) (recommended —
   provides the `somewm-client eval` globals and push-IPC integration)
 - Qt6, `wl-clipboard`, `wpctl` (PipeWire), `brightnessctl`
@@ -137,7 +137,7 @@ See [GUIDE.md](GUIDE.md) for the full architecture.
 4. Run tests and the header lint:
    ```bash
    bash tests/test-all.sh
-   # check-headers.sh lives in the somewm fork (raven2cz/somewm):
+   # check-headers.sh lives in the v2.0 work-in-progress fork (raven2cz/somewm):
    bash "${SOMEWM_FORK_PATH:-$HOME/git/github/somewm}/plans/scripts/check-headers.sh"
    ```
 5. Commit with a conventional message (`feat:`, `fix:`, `refactor:`,
@@ -148,6 +148,13 @@ See [GUIDE.md](GUIDE.md) for the full architecture.
 Built by studying and adapting excellent prior work — all attributions
 below link to the original repositories:
 
+- **[somewm](https://github.com/trip-zip/somewm)** by
+  [@trip-zip](https://github.com/trip-zip) — the wlroots-based AwesomeWM
+  port this shell is built for. *Note: I also maintain a
+  [development fork at raven2cz/somewm](https://github.com/raven2cz/somewm)
+  where active work toward somewm 2.0 happens (focus/input fixes, NVIDIA
+  workarounds, SceneFX integration). It tracks upstream and contributes
+  back via PRs.*
 - **[Quickshell](https://quickshell.outfoxxed.me/)** by
   [@outfoxxed](https://git.outfoxxed.me/outfoxxed) — the Qt/QML desktop
   shell toolkit this project is built on.
