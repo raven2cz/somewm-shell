@@ -273,17 +273,16 @@ Singleton {
         }
     }
 
-    // somewm.memory.stats(true) flat k=v via somewm-client eval.
-    //
-    // No released somewm has that API (it is the #508 proposal), and on
-    // somewm 2.x most of its fields have nothing left to count: drawables
-    // hold no cairo/shm surface under Clay and the wallpaper cache is gone.
-    // Without it, report what any somewm can: the Lua heap after a double
-    // GC and the client count; the remaining fields read 0.
+    // root.memory_stats(true) (raven2cz fork v2; upstream proposal #508,
+    // which may land as somewm.memory.stats) flat k=v via somewm-client eval.
+    // On somewm 2.x the drawable shm and wallpaper cache fields have nothing
+    // left to count and read 0; wallpaper_bytes stands in for the cache size.
+    // Without either API, report what any somewm can: the Lua heap after a
+    // double GC and the client count.
     Process {
         id: somewmProc
         command: ["timeout", "3", "somewm-client", "eval",
-            "local ok,m=pcall(function() return somewm.memory.stats(true) end); " +
+            "local ok,m=pcall(function() return (root.memory_stats or somewm.memory.stats)(true) end); " +
             "if not ok or type(m) ~= 'table' then " +
             "collectgarbage('collect'); collectgarbage('collect'); " +
             "m = { lua_bytes = collectgarbage('count') * 1024, clients = #client.get() } end; " +
@@ -298,7 +297,7 @@ Singleton {
             "m.drawable_shm_count or 0, m.drawable_shm_bytes or 0," +
             "m.wibox_count or 0, m.wibox_surface_bytes or 0," +
             "m.wallpaper and m.wallpaper.entries or 0," +
-            "m.wallpaper and m.wallpaper.estimated_bytes or 0," +
+            "m.wallpaper and m.wallpaper.estimated_bytes or m.wallpaper_bytes or 0," +
             "m.wallpaper and m.wallpaper.cairo_bytes or 0," +
             "m.wallpaper and m.wallpaper.shm_bytes or 0," +
             "m.drawables and m.drawables.surface_bytes or 0," +
