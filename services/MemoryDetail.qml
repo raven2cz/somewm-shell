@@ -295,7 +295,7 @@ Singleton {
             "malloc_used_bytes=%d malloc_free_bytes=%d malloc_releasable_bytes=%d'," +
             "m.lua_bytes or 0, m.clients or 0," +
             "m.drawable_shm_count or 0, m.drawable_shm_bytes or 0," +
-            "m.wibox_count or 0, m.wibox_surface_bytes or 0," +
+            "m.wibox_count or m.drawins or 0, m.wibox_surface_bytes or 0," +
             "m.wallpaper and m.wallpaper.entries or 0," +
             "m.wallpaper and m.wallpaper.estimated_bytes or m.wallpaper_bytes or 0," +
             "m.wallpaper and m.wallpaper.cairo_bytes or 0," +
