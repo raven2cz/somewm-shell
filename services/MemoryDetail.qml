@@ -273,12 +273,20 @@ Singleton {
         }
     }
 
-    // somewm.memory.stats(true) flat k=v via somewm-client eval
+    // somewm.memory.stats(true) flat k=v via somewm-client eval.
+    //
+    // No released somewm has that API (it is the #508 proposal), and on
+    // somewm 2.x most of its fields have nothing left to count: drawables
+    // hold no cairo/shm surface under Clay and the wallpaper cache is gone.
+    // Without it, report what any somewm can: the Lua heap after a double
+    // GC and the client count; the remaining fields read 0.
     Process {
         id: somewmProc
         command: ["timeout", "3", "somewm-client", "eval",
             "local ok,m=pcall(function() return somewm.memory.stats(true) end); " +
-            "if not ok then return 'error=memory_stats_failed' end; " +
+            "if not ok or type(m) ~= 'table' then " +
+            "collectgarbage('collect'); collectgarbage('collect'); " +
+            "m = { lua_bytes = collectgarbage('count') * 1024, clients = #client.get() } end; " +
             "return string.format(" +
             "'lua_bytes=%d clients=%d drawable_shm_count=%d drawable_shm_bytes=%d " +
             "wibox_count=%d wibox_surface_bytes=%d " +

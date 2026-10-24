@@ -564,19 +564,21 @@ Singleton {
     // Actions (footer buttons)
     // =============================================================
 
+    // IPC `exec` hands its argument to awful.spawn.with_shell, so it takes a
+    // shell command line, not Lua.
     function openHtop() {
         spawnProc.command = ["timeout", "2", "somewm-client", "exec",
-            "awful.spawn({\"alacritty\", \"-e\", \"htop\"})"]
+            "alacritty -e htop"]
         spawnProc.running = true
     }
     function openBtop() {
         spawnProc.command = ["timeout", "2", "somewm-client", "exec",
-            "awful.spawn({\"alacritty\", \"-e\", \"btop\"})"]
+            "alacritty -e btop"]
         spawnProc.running = true
     }
     function openNvidiaSmi() {
         spawnProc.command = ["timeout", "2", "somewm-client", "exec",
-            "awful.spawn({\"alacritty\", \"-e\", \"watch\", \"-n\", \"1\", \"nvidia-smi\"})"]
+            "alacritty -e watch -n 1 nvidia-smi"]
         spawnProc.running = true
     }
 
