@@ -17,6 +17,15 @@ This is the **release copy** — edit here, deploy to `~/.config/quickshell/some
 - **Config:** [somewm-one](https://github.com/raven2cz/somewm-one) (rc.lua + themes)
 - **Sibling fork checkout:** `~/git/github/somewm` (override with `SOMEWM_FORK_PATH`)
 
+## Lines: v2 (main) and v1 (legacy/v1)
+
+`main` targets **somewm 2.x** (the fork's v2 line since 2026-10-24); the
+shell for the v1 compositor is frozen on `legacy/v1` / tag `v1-legacy`. The
+shell talks to the compositor only through `somewm-client eval` / `exec` and
+`qs ipc`; on 2.x, `eval` sees only the C globals (`client`, `screen`, `tag`,
+`root`, `awesome`, `mouse`), so use `require("awful")` etc. inside snippets,
+and `somewm-client exec` runs a shell command line, not Lua.
+
 ## Edit / deploy / restart cycle
 
 ```bash
