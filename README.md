@@ -22,6 +22,12 @@
 [somewm-one](https://github.com/raven2cz/somewm-one) - it does not replace
 them.
 
+`main` targets the v2 stack: upstream somewm 2.1, wlroots 0.20.2,
+GLES2/pixman, and Clay rendering. Client corners use `client.shape`;
+compositor shadows use upstream's nine-patch implementation
+(`beautiful.shadow_*`). There is no compositor blur. Shell UI shadows are
+rendered locally with Qt Quick effects. The v1 shell is frozen on `legacy/v1`.
+
 Everything runs natively inside a single Quickshell process. No server, no
 HTTP, no WebSocket. State flows over two well-defined channels:
 
@@ -137,7 +143,7 @@ See [GUIDE.md](GUIDE.md) for the full architecture.
 4. Run tests and the header lint:
    ```bash
    bash tests/test-all.sh
-   # check-headers.sh lives in the v2.0 work-in-progress fork (raven2cz/somewm):
+   # check-headers.sh lives in the somewm fork (raven2cz/somewm):
    bash "${SOMEWM_FORK_PATH:-$HOME/git/github/somewm}/plans/scripts/check-headers.sh"
    ```
 5. Commit with a conventional message (`feat:`, `fix:`, `refactor:`,
@@ -152,8 +158,8 @@ below link to the original repositories:
   [@trip-zip](https://github.com/trip-zip) - the wlroots-based AwesomeWM
   port this shell is built for. *Note: I also maintain a
   [development fork at raven2cz/somewm](https://github.com/raven2cz/somewm)
-  where active work toward somewm 2.0 happens (focus/input fixes, NVIDIA
-  workarounds, SceneFX integration). It tracks upstream and contributes
+  targeting the v2 line (upstream somewm 2.1, focus/input fixes, NVIDIA
+  workarounds). It tracks upstream and contributes
   back via PRs.*
 - **[Quickshell](https://quickshell.outfoxxed.me/)** by
   [@outfoxxed](https://git.outfoxxed.me/outfoxxed) - the Qt/QML desktop

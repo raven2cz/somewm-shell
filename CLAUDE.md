@@ -26,6 +26,11 @@ shell talks to the compositor only through `somewm-client eval` / `exec` and
 `root`, `awesome`, `mouse`), so use `require("awful")` etc. inside snippets,
 and `somewm-client exec` runs a shell command line, not Lua.
 
+The v2 rendering stack uses upstream somewm 2.1, wlroots 0.20.2,
+GLES2/pixman, and Clay. Client corners use `client.shape`; compositor
+shadows use upstream's nine-patch implementation (`beautiful.shadow_*`).
+There is no compositor blur. Shell UI shadows use local Qt Quick effects.
+
 ## Edit / deploy / restart cycle
 
 ```bash

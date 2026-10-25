@@ -16,3 +16,8 @@ qmlcache/
 # Local artifacts
 *.bak
 .deploy.log
+
+# Python bytecode caches
+__pycache__/
+*.pyc
+*.pyo
